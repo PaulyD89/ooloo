@@ -17,7 +17,7 @@ export default function Home() {
       {/* Hero */}
       <section className="px-6 py-16 max-w-2xl mx-auto text-center">
         <img 
-          src="/oolooaltlogowithtag.png?v=2" 
+          src="/oolooaltlogowithtag.png?v=3" 
           alt="ooloo - Rent the luggage. Own the trip." 
           className="h-48 mx-auto mb-10"
         />
