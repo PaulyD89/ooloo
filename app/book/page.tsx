@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { createClient } from '../../lib/supabase'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
-import Image from 'next/image'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -144,8 +143,8 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center">
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
           <h3 className="font-semibold text-lg">{product.name}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
         </div>
@@ -162,27 +161,29 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
           
           {/* Thumbnails */}
           {images.length > 1 && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 justify-center">
               {images.map((img, index) => (
                 <button
                   key={index}
                   onClick={() => setSelectedImage(index)}
-                  className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 ${
-                    selectedImage === index ? 'border-black' : 'border-transparent'
+                  className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 ${
+                    selectedImage === index ? 'border-black' : 'border-gray-200'
                   }`}
                 >
                   <img
                     src={img.url}
                     alt={img.label}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
-                  <span className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs py-1 text-center">
-                    {img.label}
-                  </span>
                 </button>
               ))}
             </div>
           )}
+          
+          {/* Image label */}
+          <p className="text-center text-sm text-gray-500 mt-3">
+            {images[selectedImage].label} View
+          </p>
         </div>
       </div>
     </div>
@@ -489,28 +490,30 @@ export default function BookPage() {
                   {product.image_url && (
                     <button
                       onClick={() => setGalleryProduct(product)}
-                      className="relative w-24 h-24 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 hover:opacity-80 transition"
+                      className="relative w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 hover:opacity-80 transition"
                     >
                       <img
                         src={product.image_url}
                         alt={product.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-1"
                       />
-                      <span className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-                        +{product.slug === 'set' ? '0' : '3'}
-                      </span>
+                      {product.slug !== 'set' && (
+                        <span className="absolute bottom-1 right-1 bg-black bg-opacity-60 text-white text-xs px-1.5 py-0.5 rounded">
+                          +3
+                        </span>
+                      )}
                     </button>
                   )}
                   
                   {/* Product Info */}
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold">{product.name}</h3>
-                    <p className="text-sm text-gray-600">{product.description}</p>
+                    <p className="text-sm text-gray-600 truncate">{product.description}</p>
                     <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
                   </div>
                   
                   {/* Quantity Controls */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <button 
                       onClick={() => updateCart(product.id, -1)}
                       className="w-8 h-8 rounded-full border flex items-center justify-center"
