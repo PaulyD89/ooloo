@@ -33,7 +33,9 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-lg shadow-sm border max-w-md w-full">
-        <h1 className="text-2xl font-bold mb-6 text-center">ooloo admin</h1>
+  <div className="flex justify-center mb-6">
+    <img src="/oolooicon.jpg" alt="ooloo" className="h-16" />
+  </div>
         
         <form onSubmit={handleLogin} className="space-y-4">
           <div>

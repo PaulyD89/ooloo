@@ -5,25 +5,30 @@ export default function Home() {
     <main className="min-h-screen bg-white">
       {/* Header */}
       <header className="p-6">
-  <a href="/">
-    <img 
-      src="/oolooaltlogowithtag.png" 
-      alt="ooloo - Rent the luggage. Own the trip." 
-      className="h-12"
-    />
-  </a>
-</header>
+        <a href="/">
+          <img 
+            src="/oolooicon.jpg" 
+            alt="ooloo" 
+            className="h-16"
+          />
+        </a>
+      </header>
 
       {/* Hero */}
-      <section className="px-6 py-20 max-w-2xl mx-auto text-center">
+      <section className="px-6 py-16 max-w-2xl mx-auto text-center">
+        <img 
+          src="/oolooaltlogowithtag.png" 
+          alt="ooloo - Rent the luggage. Own the trip." 
+          className="h-48 mx-auto mb-10"
+        />
         <h2 className="text-4xl font-bold mb-6">
           Rent luggage for your next trip
         </h2>
         <p className="text-xl text-gray-600 mb-10">
-          Premium luggage delivered to your door. Return it when you're back. 
+          Premium luggage delivered to your door. Return it when you're back.
           No storage, no hassle.
         </p>
-        <Link 
+        <Link
           href="/book"
           className="inline-block bg-black text-white px-8 py-4 rounded-lg text-lg font-medium hover:bg-gray-800 transition"
         >

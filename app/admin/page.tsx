@@ -221,8 +221,10 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b p-6">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">ooloo admin</h1>
+  <div className="max-w-6xl mx-auto flex justify-between items-center">
+    <a href="/">
+      <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
+    </a>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-500">{user?.email}</span>
             <button 

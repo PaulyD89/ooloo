@@ -206,9 +206,11 @@ export default function DriverPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b p-4">
-        <div className="max-w-2xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-bold">ooloo driver</h1>
+  <div className="max-w-2xl mx-auto flex justify-between items-center">
+    <div>
+      <a href="/">
+        <img src="/oolooicon.jpg" alt="ooloo" className="h-10" />
+      </a>
             <p className="text-sm text-gray-500">{driver?.city?.name}</p>
           </div>
           <button 

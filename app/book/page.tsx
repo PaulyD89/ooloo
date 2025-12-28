@@ -398,8 +398,14 @@ export default function BookPage() {
   return (
     <main className="min-h-screen bg-white">
       <header className="p-6 border-b">
-        <h1 className="text-2xl font-bold">ooloo</h1>
-      </header>
+  <a href="/">
+    <img 
+      src="/oolooicon.jpg" 
+      alt="ooloo" 
+      className="h-12"
+    />
+  </a>
+</header>
 
       <div className="max-w-2xl mx-auto p-6">
         {/* Progress indicator */}
