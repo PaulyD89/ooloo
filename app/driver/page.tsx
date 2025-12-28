@@ -754,34 +754,64 @@ export default function DriverPage() {
           <div className="flex-1 flex flex-col">
             {/* Location Controls */}
 <div className="bg-white p-3 border-b flex items-center justify-between gap-2">
-  {!trackingEnabled ? (
-    <button
-      onClick={startLocationTracking}
-      className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium"
-    >
-      <span>📍</span> Enable Location
-    </button>
-  ) : (
-    <>
-      <div className="flex items-center gap-2">
+  <div className="flex items-center gap-2">
+    {!trackingEnabled ? (
+      <button
+        onClick={startLocationTracking}
+        className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium"
+      >
+        <span>📍</span> Location
+      </button>
+    ) : (
+      <>
         <span className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
-        <span className="text-sm text-gray-600">Tracking active</span>
-      </div>
-      <div className="flex gap-2">
+        <span className="text-sm text-gray-600">Tracking</span>
         <button
           onClick={centerOnDriver}
-          className="px-3 py-1 border rounded-lg text-sm"
+          className="px-2 py-1 border rounded-lg text-xs"
         >
-          Center on me
+          Center
         </button>
         <button
           onClick={stopLocationTracking}
-          className="px-3 py-1 border border-red-200 text-red-600 rounded-lg text-sm"
+          className="px-2 py-1 border border-red-200 text-red-600 rounded-lg text-xs"
         >
           Stop
         </button>
-      </div>
-    </>
+      </>
+    )}
+  </div>
+  
+  {routeStops.length > 0 && (
+    <button
+      onClick={() => {
+        const stops = routeStops.filter(s => {
+          const isCompleted = s.type === 'delivery' 
+            ? ['delivered', 'out_for_pickup', 'returned'].includes(s.order.status)
+            : s.order.status === 'returned'
+          return !isCompleted
+        })
+        
+        if (stops.length === 0) {
+          alert('All stops completed!')
+          return
+        }
+        
+        const destination = encodeURIComponent(stops[stops.length - 1].address)
+        const waypoints = stops.slice(0, -1).map(s => encodeURIComponent(s.address)).join('|')
+        
+        let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`
+        if (waypoints) {
+          url += `&waypoints=${waypoints}`
+        }
+        url += '&travelmode=driving'
+        
+        window.open(url, '_blank')
+      }}
+      className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium"
+    >
+      <span>🧭</span> Navigate
+    </button>
   )}
 </div>
             
