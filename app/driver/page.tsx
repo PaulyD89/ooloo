@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '../../lib/supabase'
 import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
@@ -38,7 +38,6 @@ type RouteStop = {
 declare global {
   interface Window {
     google: typeof google
-    initMap: () => void
   }
 }
 
@@ -54,11 +53,18 @@ export default function DriverPage() {
   const [routeStops, setRouteStops] = useState<RouteStop[]>([])
   const [mapLoaded, setMapLoaded] = useState(false)
   const [routeLoading, setRouteLoading] = useState(false)
+  
+  // Geolocation state
+  const [driverLocation, setDriverLocation] = useState<google.maps.LatLngLiteral | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [trackingEnabled, setTrackingEnabled] = useState(false)
 
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<google.maps.Map | null>(null)
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null)
   const markersRef = useRef<google.maps.Marker[]>([])
+  const driverMarkerRef = useRef<google.maps.Marker | null>(null)
+  const watchIdRef = useRef<number | null>(null)
 
   const router = useRouter()
   const supabase = createClient()
@@ -76,10 +82,6 @@ export default function DriverPage() {
     script.defer = true
     script.onload = () => setMapLoaded(true)
     document.head.appendChild(script)
-
-    return () => {
-      // Cleanup if needed
-    }
   }, [])
 
   useEffect(() => {
@@ -105,6 +107,139 @@ export default function DriverPage() {
       calculateRoute()
     }
   }, [activeTab, orders, selectedDate])
+
+  // Update driver marker when location changes
+  useEffect(() => {
+    if (driverLocation && mapInstanceRef.current) {
+      updateDriverMarker()
+    }
+  }, [driverLocation])
+
+  // Cleanup geolocation watch on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      }
+    }
+  }, [])
+
+  function startLocationTracking() {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser')
+      return
+    }
+
+    setTrackingEnabled(true)
+    setLocationError(null)
+
+    // Get initial position
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setDriverLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        })
+      },
+      (error) => {
+        setLocationError(getLocationErrorMessage(error))
+      },
+      { enableHighAccuracy: true }
+    )
+
+    // Watch position for updates
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        setDriverLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        })
+        setLocationError(null)
+      },
+      (error) => {
+        setLocationError(getLocationErrorMessage(error))
+      },
+      { 
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 5000
+      }
+    )
+  }
+
+  function stopLocationTracking() {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current)
+      watchIdRef.current = null
+    }
+    setTrackingEnabled(false)
+    
+    // Remove driver marker
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setMap(null)
+      driverMarkerRef.current = null
+    }
+  }
+
+  function getLocationErrorMessage(error: GeolocationPositionError): string {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return 'Location permission denied. Please enable location access.'
+      case error.POSITION_UNAVAILABLE:
+        return 'Location information unavailable.'
+      case error.TIMEOUT:
+        return 'Location request timed out.'
+      default:
+        return 'An unknown error occurred.'
+    }
+  }
+
+  function updateDriverMarker() {
+    if (!mapInstanceRef.current || !driverLocation) return
+
+    if (driverMarkerRef.current) {
+      // Update existing marker position
+      driverMarkerRef.current.setPosition(driverLocation)
+    } else {
+      // Create new driver marker
+      driverMarkerRef.current = new google.maps.Marker({
+        position: driverLocation,
+        map: mapInstanceRef.current,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: '#3b82f6',
+          fillOpacity: 1,
+          strokeColor: 'white',
+          strokeWeight: 3
+        },
+        title: 'Your Location',
+        zIndex: 1000
+      })
+
+      // Add pulsing effect with an outer circle
+      new google.maps.Marker({
+        position: driverLocation,
+        map: mapInstanceRef.current,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 20,
+          fillColor: '#3b82f6',
+          fillOpacity: 0.2,
+          strokeColor: '#3b82f6',
+          strokeWeight: 1
+        },
+        zIndex: 999
+      })
+    }
+  }
+
+  function centerOnDriver() {
+    if (mapInstanceRef.current && driverLocation) {
+      mapInstanceRef.current.setCenter(driverLocation)
+      mapInstanceRef.current.setZoom(15)
+    }
+  }
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -175,7 +310,6 @@ export default function DriverPage() {
   function initializeMap() {
     if (!mapRef.current || !window.google) return
 
-    // Default to LA, will be updated based on orders
     const defaultCenter = { lat: 34.0522, lng: -118.2437 }
 
     mapInstanceRef.current = new google.maps.Map(mapRef.current, {
@@ -192,12 +326,17 @@ export default function DriverPage() {
 
     directionsRendererRef.current = new google.maps.DirectionsRenderer({
       map: mapInstanceRef.current,
-      suppressMarkers: true, // We'll add custom markers
+      suppressMarkers: true,
       polylineOptions: {
         strokeColor: '#0891b2',
         strokeWeight: 5
       }
     })
+
+    // If tracking was already enabled, show driver location
+    if (driverLocation) {
+      updateDriverMarker()
+    }
   }
 
   async function calculateRoute() {
@@ -207,10 +346,8 @@ export default function DriverPage() {
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
-    // Build stops list - deliveries first (sorted by window), then pickups
     const stops: RouteStop[] = []
 
-    // Add deliveries
     deliveries.forEach(order => {
       stops.push({
         order,
@@ -220,7 +357,6 @@ export default function DriverPage() {
       })
     })
 
-    // Add pickups
     pickups.forEach(order => {
       stops.push({
         order,
@@ -237,7 +373,6 @@ export default function DriverPage() {
 
     setRouteLoading(true)
 
-    // Geocode all addresses
     const geocoder = new google.maps.Geocoder()
     const geocodedStops: RouteStop[] = []
 
@@ -264,14 +399,12 @@ export default function DriverPage() {
         }
       } catch (error) {
         console.error('Geocoding error for:', stop.address, error)
-        // Still add the stop without position
         geocodedStops.push(stop)
       }
     }
 
     setRouteStops(geocodedStops)
 
-    // Add markers for each stop
     geocodedStops.forEach((stop, index) => {
       if (!stop.position || !mapInstanceRef.current) return
 
@@ -297,7 +430,6 @@ export default function DriverPage() {
         }
       })
 
-      // Add info window
       const infoWindow = new google.maps.InfoWindow({
         content: `
           <div style="padding: 8px; max-width: 200px;">
@@ -318,82 +450,41 @@ export default function DriverPage() {
       markersRef.current.push(marker)
     })
 
-    // Calculate optimized route if we have 2+ stops with positions
     const stopsWithPositions = geocodedStops.filter(s => s.position)
     
     if (stopsWithPositions.length >= 2) {
       const directionsService = new google.maps.DirectionsService()
 
-      const origin = stopsWithPositions[0].position!
+      // Use driver location as origin if available, otherwise use first stop
+      const origin = driverLocation || stopsWithPositions[0].position!
       const destination = stopsWithPositions[stopsWithPositions.length - 1].position!
-      const waypoints = stopsWithPositions.slice(1, -1).map(stop => ({
-        location: stop.position!,
-        stopover: true
-      }))
+      
+      const waypoints = driverLocation 
+        ? stopsWithPositions.map(stop => ({
+            location: stop.position!,
+            stopover: true
+          }))
+        : stopsWithPositions.slice(1, -1).map(stop => ({
+            location: stop.position!,
+            stopover: true
+          }))
 
       try {
         const result = await directionsService.route({
           origin,
           destination,
           waypoints,
-          optimizeWaypoints: true, // This optimizes the route!
+          optimizeWaypoints: true,
           travelMode: google.maps.TravelMode.DRIVING
         })
 
         if (directionsRendererRef.current) {
           directionsRendererRef.current.setDirections(result)
         }
-
-        // Reorder stops based on optimized route
-        if (result.routes[0]?.waypoint_order) {
-          const optimizedOrder = result.routes[0].waypoint_order
-          const middleStops = stopsWithPositions.slice(1, -1)
-          const reorderedMiddle = optimizedOrder.map(i => middleStops[i])
-          const optimizedStops = [
-            stopsWithPositions[0],
-            ...reorderedMiddle,
-            stopsWithPositions[stopsWithPositions.length - 1]
-          ]
-          
-          // Update markers with new numbers
-          markersRef.current.forEach(marker => marker.setMap(null))
-          markersRef.current = []
-          
-          optimizedStops.forEach((stop, index) => {
-            if (!stop.position || !mapInstanceRef.current) return
-
-            const isCompleted = stop.type === 'delivery' 
-              ? ['delivered', 'out_for_pickup', 'returned'].includes(stop.order.status)
-              : stop.order.status === 'returned'
-
-            const marker = new google.maps.Marker({
-              position: stop.position,
-              map: mapInstanceRef.current,
-              label: {
-                text: String(index + 1),
-                color: 'white',
-                fontWeight: 'bold'
-              },
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 18,
-                fillColor: isCompleted ? '#9ca3af' : (stop.type === 'delivery' ? '#0891b2' : '#f97316'),
-                fillOpacity: 1,
-                strokeColor: 'white',
-                strokeWeight: 2
-              }
-            })
-
-            markersRef.current.push(marker)
-          })
-
-          setRouteStops(optimizedStops)
-        }
       } catch (error) {
         console.error('Directions error:', error)
       }
     } else if (stopsWithPositions.length === 1) {
-      // Just center on the single stop
       mapInstanceRef.current.setCenter(stopsWithPositions[0].position!)
       mapInstanceRef.current.setZoom(14)
     }
@@ -415,40 +506,37 @@ export default function DriverPage() {
   }
 
   async function markPickedUp(orderId: string) {
-  // Get order details to check if cross-city return
-  const order = orders.find(o => o.id === orderId)
-  
-  const { error } = await supabase
-    .from('orders')
-    .update({ status: 'returned' })
-    .eq('id', orderId)
-
-  if (!error) {
-    // Handle cross-city return - move inventory to return city
-    if (order && order.delivery_city?.id !== order.return_city?.id) {
-      // Get reservations for this order
-      const { data: reservations } = await supabase
-        .from('reservations')
-        .select('inventory_item_id')
-        .eq('order_id', orderId)
-      
-      if (reservations && reservations.length > 0) {
-        // Update inventory items to new city
-        const itemIds = reservations.map(r => r.inventory_item_id)
-        await supabase
-          .from('inventory_items')
-          .update({ city_id: order.return_city?.id })
-          .in('id', itemIds)
-      }
-    }
+    const order = orders.find(o => o.id === orderId)
     
-    setOrders(prev => prev.map(o => 
-      o.id === orderId ? { ...o, status: 'returned' } : o
-    ))
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'returned' })
+      .eq('id', orderId)
+
+    if (!error) {
+      if (order && order.delivery_city?.id !== order.return_city?.id) {
+        const { data: reservations } = await supabase
+          .from('reservations')
+          .select('inventory_item_id')
+          .eq('order_id', orderId)
+        
+        if (reservations && reservations.length > 0) {
+          const itemIds = reservations.map(r => r.inventory_item_id)
+          await supabase
+            .from('inventory_items')
+            .update({ city_id: order.return_city?.id })
+            .in('id', itemIds)
+        }
+      }
+      
+      setOrders(prev => prev.map(o => 
+        o.id === orderId ? { ...o, status: 'returned' } : o
+      ))
+    }
   }
-}
 
   async function handleLogout() {
+    stopLocationTracking()
     await supabase.auth.signOut()
     router.push('/login')
   }
@@ -462,7 +550,6 @@ export default function DriverPage() {
     return windows[window] || window
   }
 
-  // Separate deliveries and pickups
   const deliveries = orders.filter(o => 
     o.delivery_date === selectedDate && 
     o.delivery_city?.id === driver?.city_id &&
@@ -665,6 +752,45 @@ export default function DriverPage() {
         ) : (
           /* Map View */
           <div className="flex-1 flex flex-col">
+            {/* Location Controls */}
+            <div className="bg-white p-3 border-b flex items-center justify-between gap-2">
+              {!trackingEnabled ? (
+                <button
+                  onClick={startLocationTracking}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium"
+                >
+                  <span>📍</span> Enable Location
+                </button>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
+                    <span className="text-sm text-gray-600">Tracking active</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={centerOnDriver}
+                      className="px-3 py-1 border rounded-lg text-sm"
+                    >
+                      Center on me
+                    </button>
+                    <button
+                      onClick={stopLocationTracking}
+                      className="px-3 py-1 border border-red-200 text-red-600 rounded-lg text-sm"
+                    >
+                      Stop
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {locationError && (
+              <div className="bg-red-50 text-red-700 p-3 text-sm">
+                {locationError}
+              </div>
+            )}
+
             {/* Map */}
             <div 
               ref={mapRef} 
@@ -686,6 +812,11 @@ export default function DriverPage() {
                 <p className="text-sm text-gray-500">
                   <span className="inline-block w-3 h-3 bg-cyan-500 rounded-full mr-1"></span> Delivery
                   <span className="inline-block w-3 h-3 bg-orange-500 rounded-full ml-3 mr-1"></span> Pickup
+                  {trackingEnabled && (
+                    <>
+                      <span className="inline-block w-3 h-3 bg-blue-500 rounded-full ml-3 mr-1"></span> You
+                    </>
+                  )}
                 </p>
               </div>
               
