@@ -126,11 +126,9 @@ function CheckoutForm({ orderId }: { orderId: string }) {
   )
 }
 
-// Image gallery modal component
 function ImageGallery({ product, onClose }: { product: Product, onClose: () => void }) {
   const [selectedImage, setSelectedImage] = useState(0)
   
-  // Build image URLs based on product slug
   const baseUrl = product.image_url?.replace('-front.jpg', '') || ''
   const images = product.slug === 'set' 
     ? [{ url: `${baseUrl}-front.jpg`, label: 'Front' }]
@@ -150,7 +148,6 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
         </div>
         
         <div className="p-4">
-          {/* Main image */}
           <div className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
             <img
               src={images[selectedImage].url}
@@ -159,7 +156,6 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
             />
           </div>
           
-          {/* Thumbnails */}
           {images.length > 1 && (
             <div className="flex gap-2 justify-center">
               {images.map((img, index) => (
@@ -180,7 +176,6 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
             </div>
           )}
           
-          {/* Image label */}
           <p className="text-center text-sm text-gray-500 mt-3">
             {images[selectedImage].label} View
           </p>
@@ -196,14 +191,12 @@ export default function BookPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [galleryProduct, setGalleryProduct] = useState<Product | null>(null)
   
-  // Form state - city selection and dates
   const [deliveryCitySelect, setDeliveryCitySelect] = useState('')
   const [returnCitySelect, setReturnCitySelect] = useState('')
   const [deliveryDate, setDeliveryDate] = useState('')
   const [returnDate, setReturnDate] = useState('')
   const [cart, setCart] = useState<Record<string, number>>({})
   
-  // Customer details
   const [customerName, setCustomerName] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -219,19 +212,19 @@ export default function BookPage() {
   const [returnWindow, setReturnWindow] = useState('morning')
   const [sameAsDelivery, setSameAsDelivery] = useState(false)
 
-  // Promo code state
   const [promoCodeInput, setPromoCodeInput] = useState('')
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null)
   const [promoError, setPromoError] = useState('')
   const [promoLoading, setPromoLoading] = useState(false)
 
-  // Payment state
   const [clientSecret, setClientSecret] = useState('')
   const [orderId, setOrderId] = useState('')
 
+  const [availability, setAvailability] = useState<Record<string, number>>({})
+  const [availabilityLoading, setAvailabilityLoading] = useState(false)
+
   const supabase = createClient()
 
-  // Load cities and products from Supabase
   useEffect(() => {
     async function loadData() {
       const [citiesRes, productsRes] = await Promise.all([
@@ -246,7 +239,6 @@ export default function BookPage() {
     loadData()
   }, [])
 
-  // Handle same as delivery checkbox
   useEffect(() => {
     if (sameAsDelivery) {
       setReturnStreet(deliveryStreet)
@@ -256,39 +248,85 @@ export default function BookPage() {
     }
   }, [sameAsDelivery, deliveryStreet, deliveryCityAddress, deliveryState, deliveryZip])
 
-  // Calculate rental days
+  useEffect(() => {
+    if (step === 2 && deliveryCitySelect && deliveryDate && returnDate) {
+      checkAvailability()
+    }
+  }, [step, deliveryCitySelect, deliveryDate, returnDate])
+
+  const checkAvailability = async () => {
+    if (!deliveryCitySelect || !deliveryDate || !returnDate) return
+    
+    setAvailabilityLoading(true)
+    try {
+      const response = await fetch('/api/availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cityId: deliveryCitySelect,
+          deliveryDate,
+          returnDate
+        })
+      })
+      const data = await response.json()
+      if (data.availability) {
+        setAvailability(data.availability)
+      }
+    } catch (error) {
+      console.error('Failed to check availability:', error)
+    }
+    setAvailabilityLoading(false)
+  }
+
   const days = deliveryDate && returnDate 
     ? Math.max(1, Math.ceil((new Date(returnDate).getTime() - new Date(deliveryDate).getTime()) / (1000 * 60 * 60 * 24)))
     : 0
 
-  // Get tax rate from selected delivery city
   const selectedCity = cities.find(c => c.id === deliveryCitySelect)
   const taxRate = selectedCity?.tax_rate || 0.095
 
-  // Calculate subtotal
   const subtotal = products.reduce((sum, product) => {
     const qty = cart[product.id] || 0
     return sum + (qty * product.daily_rate * days)
   }, 0)
 
-  // Calculate discount
   const discount = appliedPromo
     ? appliedPromo.discount_type === 'percent'
       ? Math.round(subtotal * (appliedPromo.discount_value / 100))
       : appliedPromo.discount_value
     : 0
 
-  const deliveryFee = 1999 // $19.99 in cents
+  const deliveryFee = 1999
   const subtotalAfterDiscount = subtotal - discount
   const taxableAmount = subtotalAfterDiscount + deliveryFee
   const tax = Math.round(taxableAmount * taxRate)
   const total = subtotalAfterDiscount + deliveryFee + tax
 
   const updateCart = (productId: string, delta: number) => {
-    setCart(prev => ({
-      ...prev,
-      [productId]: Math.max(0, (prev[productId] || 0) + delta)
-    }))
+    const product = products.find(p => p.id === productId)
+    
+    setCart(prev => {
+      const currentQty = prev[productId] || 0
+      const newQty = currentQty + delta
+      
+      let maxAvailable = availability[productId] ?? 999
+      
+      // For sets, also check carryon and large availability
+      if (product?.slug === 'set') {
+        const carryonProduct = products.find(p => p.slug === 'carryon')
+        const largeProduct = products.find(p => p.slug === 'large')
+        if (carryonProduct && largeProduct) {
+          const carryonAvail = (availability[carryonProduct.id] ?? 999) - (prev[carryonProduct.id] || 0)
+          const largeAvail = (availability[largeProduct.id] ?? 999) - (prev[largeProduct.id] || 0)
+          maxAvailable = Math.min(maxAvailable, carryonAvail, largeAvail)
+        }
+      }
+      
+      return {
+        ...prev,
+        [productId]: Math.max(0, Math.min(newQty, maxAvailable))
+      }
+    })
   }
 
   const applyPromoCode = async () => {
@@ -310,21 +348,18 @@ export default function BookPage() {
       return
     }
 
-    // Check if expired
     if (data.expires_at && new Date(data.expires_at) < new Date()) {
       setPromoError('This promo code has expired')
       setPromoLoading(false)
       return
     }
 
-    // Check usage limit
     if (data.usage_limit && data.times_used >= data.usage_limit) {
       setPromoError('This promo code has reached its usage limit')
       setPromoLoading(false)
       return
     }
 
-    // Check minimum order total
     if (data.min_order_total && subtotal < data.min_order_total) {
       setPromoError(`Minimum order of $${(data.min_order_total / 100).toFixed(2)} required`)
       setPromoLoading(false)
@@ -349,7 +384,6 @@ export default function BookPage() {
     const fullDeliveryAddress = `${deliveryStreet}, ${deliveryCityAddress}, ${deliveryState} ${deliveryZip}`
     const fullReturnAddress = `${returnStreet}, ${returnCityAddress}, ${returnState} ${returnZip}`
 
-    // Build cart details for API
     const cartDetails: Record<string, any> = {}
     products.forEach(product => {
       const qty = cart[product.id] || 0
@@ -411,7 +445,6 @@ export default function BookPage() {
       </header>
 
       <div className="max-w-2xl mx-auto p-6">
-        {/* Progress indicator */}
         <div className="flex gap-2 mb-8">
           {[1, 2, 3, 4].map(s => (
             <div 
@@ -421,7 +454,6 @@ export default function BookPage() {
           ))}
         </div>
 
-        {/* Step 1: City & Dates */}
         {step === 1 && (
           <div>
             <h2 className="text-2xl font-bold mb-6">Where and when?</h2>
@@ -486,60 +518,85 @@ export default function BookPage() {
           </div>
         )}
 
-        {/* Step 2: Select Luggage */}
         {step === 2 && (
           <div>
             <h2 className="text-2xl font-bold mb-2">Choose your luggage</h2>
             <p className="text-gray-600 mb-6">{days} day rental</p>
 
-            <div className="space-y-4">
-              {products.map(product => (
-                <div key={product.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                  {/* Product Image */}
-                  {product.image_url && (
-                    <button
-                      onClick={() => setGalleryProduct(product)}
-                      className="relative w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 hover:opacity-80 transition"
-                    >
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="w-full h-full object-contain p-1"
-                      />
-                      {product.slug !== 'set' && (
-                        <span className="absolute bottom-1 right-1 bg-black bg-opacity-60 text-white text-xs px-1.5 py-0.5 rounded">
-                          +3
-                        </span>
+            {availabilityLoading ? (
+              <div className="text-center py-8">Checking availability...</div>
+            ) : (
+              <div className="space-y-4">
+                {products.map(product => {
+                  const available = availability[product.id] ?? 0
+                  const inCart = cart[product.id] || 0
+                  const soldOut = available === 0 && inCart === 0
+
+                  // For sets, check if underlying products are available
+                  let effectiveAvailable = available
+                  if (product.slug === 'set') {
+                    const carryonProduct = products.find(p => p.slug === 'carryon')
+                    const largeProduct = products.find(p => p.slug === 'large')
+                    if (carryonProduct && largeProduct) {
+                      const carryonAvail = (availability[carryonProduct.id] ?? 0) - (cart[carryonProduct.id] || 0)
+                      const largeAvail = (availability[largeProduct.id] ?? 0) - (cart[largeProduct.id] || 0)
+                      effectiveAvailable = Math.min(available, carryonAvail, largeAvail)
+                    }
+                  }
+
+                  const cantAddMore = inCart >= effectiveAvailable
+
+                  return (
+                    <div key={product.id} className={`flex items-center gap-4 p-4 border rounded-lg ${soldOut ? 'opacity-50' : ''}`}>
+                      {product.image_url && (
+                        <button
+                          onClick={() => setGalleryProduct(product)}
+                          className="relative w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 hover:opacity-80 transition"
+                        >
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-full h-full object-contain p-1"
+                          />
+                          {product.slug !== 'set' && (
+                            <span className="absolute bottom-1 right-1 bg-black bg-opacity-60 text-white text-xs px-1.5 py-0.5 rounded">
+                              +3
+                            </span>
+                          )}
+                        </button>
                       )}
-                    </button>
-                  )}
-                  
-                  {/* Product Info */}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold">{product.name}</h3>
-                    <p className="text-sm text-gray-600 truncate">{product.description}</p>
-                    <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
-                  </div>
-                  
-                  {/* Quantity Controls */}
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => updateCart(product.id, -1)}
-                      className="w-8 h-8 rounded-full border flex items-center justify-center"
-                    >
-                      -
-                    </button>
-                    <span className="w-6 text-center">{cart[product.id] || 0}</span>
-                    <button 
-                      onClick={() => updateCart(product.id, 1)}
-                      className="w-8 h-8 rounded-full border flex items-center justify-center"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold">{product.name}</h3>
+                        <p className="text-sm text-gray-600 truncate">{product.description}</p>
+                        <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
+                        <p className={`text-xs mt-1 ${soldOut ? 'text-red-600' : effectiveAvailable <= 3 ? 'text-orange-600' : 'text-gray-400'}`}>
+                          {soldOut ? 'Sold out for these dates' : `${effectiveAvailable} available`}
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => updateCart(product.id, -1)}
+                          disabled={inCart === 0}
+                          className="w-8 h-8 rounded-full border flex items-center justify-center disabled:opacity-30"
+                        >
+                          -
+                        </button>
+                        <span className="w-6 text-center">{inCart}</span>
+                        <button 
+                          onClick={() => updateCart(product.id, 1)}
+                          disabled={soldOut || cantAddMore}
+                          className="w-8 h-8 rounded-full border flex items-center justify-center disabled:opacity-30"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             {subtotal > 0 && (
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -568,7 +625,6 @@ export default function BookPage() {
           </div>
         )}
 
-        {/* Step 3: Contact & Address */}
         {step === 3 && (
           <div>
             <h2 className="text-2xl font-bold mb-6">Delivery details</h2>
@@ -749,7 +805,6 @@ export default function BookPage() {
                 </div>
               </div>
 
-              {/* Promo Code */}
               <div className="pt-4 border-t">
                 <h3 className="font-semibold mb-4">Promo Code</h3>
                 {appliedPromo ? (
@@ -837,7 +892,6 @@ export default function BookPage() {
           </div>
         )}
 
-        {/* Step 4: Payment */}
         {step === 4 && clientSecret && (
           <div>
             <h2 className="text-2xl font-bold mb-6">Payment</h2>
@@ -863,7 +917,6 @@ export default function BookPage() {
         )}
       </div>
 
-      {/* Image Gallery Modal */}
       {galleryProduct && (
         <ImageGallery 
           product={galleryProduct} 

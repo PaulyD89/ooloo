@@ -33,6 +33,60 @@ export async function POST(request: NextRequest) {
       promoCodeId
     } = body
 
+    // Get product info for set handling
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, slug')
+
+    const productMap = new Map(products?.map(p => [p.id, p.slug]) || [])
+    const carryonProductId = products?.find(p => p.slug === 'carryon')?.id
+    const largeProductId = products?.find(p => p.slug === 'large')?.id
+
+    // Verify availability before proceeding
+    for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {
+      const slug = productMap.get(productId)
+      let itemsToCheck: { productId: string; quantity: number }[] = []
+
+      if (slug === 'set') {
+        itemsToCheck = [
+          { productId: carryonProductId!, quantity: details.quantity },
+          { productId: largeProductId!, quantity: details.quantity }
+        ]
+      } else {
+        itemsToCheck = [{ productId, quantity: details.quantity }]
+      }
+
+      for (const item of itemsToCheck) {
+        // Get reserved items for date range
+        const { data: reservedItemIds } = await supabase
+          .from('reservations')
+          .select('inventory_item_id')
+          .gte('end_date', deliveryDate)
+          .lte('start_date', returnDate)
+
+        const excludeIds = reservedItemIds?.map(r => r.inventory_item_id) || []
+
+        let query = supabase
+          .from('inventory_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('city_id', deliveryCityId)
+          .eq('product_id', item.productId)
+          .eq('status', 'available')
+
+        if (excludeIds.length > 0) {
+          query = query.not('id', 'in', `(${excludeIds.join(',')})`)
+        }
+
+        const { count } = await query
+
+        if ((count || 0) < item.quantity) {
+          return NextResponse.json({ 
+            error: 'Some items are no longer available. Please go back and adjust your order.' 
+          }, { status: 400 })
+        }
+      }
+    }
+
     // Create Stripe Payment Intent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: total,
@@ -91,6 +145,68 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) {
       console.error('Order items error:', itemsError)
+    }
+
+    // Reserve inventory
+    const reservations: { inventory_item_id: string; order_id: string; start_date: string; end_date: string }[] = []
+
+    for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {
+      const slug = productMap.get(productId)
+      let itemsToReserve: { productId: string; quantity: number }[] = []
+
+      if (slug === 'set') {
+        itemsToReserve = [
+          { productId: carryonProductId!, quantity: details.quantity },
+          { productId: largeProductId!, quantity: details.quantity }
+        ]
+      } else {
+        itemsToReserve = [{ productId, quantity: details.quantity }]
+      }
+
+      for (const item of itemsToReserve) {
+        const { data: reservedItemIds } = await supabase
+          .from('reservations')
+          .select('inventory_item_id')
+          .gte('end_date', deliveryDate)
+          .lte('start_date', returnDate)
+
+        const excludeIds = reservedItemIds?.map(r => r.inventory_item_id) || []
+
+        let query = supabase
+          .from('inventory_items')
+          .select('id')
+          .eq('city_id', deliveryCityId)
+          .eq('product_id', item.productId)
+          .eq('status', 'available')
+          .limit(item.quantity)
+
+        if (excludeIds.length > 0) {
+          query = query.not('id', 'in', `(${excludeIds.join(',')})`)
+        }
+
+        const { data: availableItems } = await query
+
+        if (availableItems) {
+          for (const invItem of availableItems) {
+            reservations.push({
+              inventory_item_id: invItem.id,
+              order_id: order.id,
+              start_date: deliveryDate,
+              end_date: returnDate
+            })
+          }
+        }
+      }
+    }
+
+    if (reservations.length > 0) {
+      const { error: reserveError } = await supabase
+        .from('reservations')
+        .insert(reservations)
+
+      if (reserveError) {
+        console.error('Reservation error:', reserveError)
+      }
     }
 
     // Increment promo code usage if one was used
