@@ -278,9 +278,11 @@ export default function BookPage() {
       : appliedPromo.discount_value
     : 0
 
+  const deliveryFee = 1999 // $19.99 in cents
   const subtotalAfterDiscount = subtotal - discount
-  const tax = Math.round(subtotalAfterDiscount * taxRate)
-  const total = subtotalAfterDiscount + tax
+  const taxableAmount = subtotalAfterDiscount + deliveryFee
+  const tax = Math.round(taxableAmount * taxRate)
+  const total = subtotalAfterDiscount + deliveryFee + tax
 
   const updateCart = (productId: string, delta: number) => {
     setCart(prev => ({
@@ -378,6 +380,7 @@ export default function BookPage() {
         cart: cartDetails,
         subtotal,
         discount,
+        deliveryFee,
         tax,
         total,
         promoCodeId: appliedPromo?.id || null
@@ -398,14 +401,14 @@ export default function BookPage() {
   return (
     <main className="min-h-screen bg-white">
       <header className="p-6 border-b">
-  <a href="/">
-    <img 
-      src="/oolooicon.jpg" 
-      alt="ooloo" 
-      className="h-12"
-    />
-  </a>
-</header>
+        <a href="/">
+          <img 
+            src="/oolooicon.jpg" 
+            alt="ooloo" 
+            className="h-12"
+          />
+        </a>
+      </header>
 
       <div className="max-w-2xl mx-auto p-6">
         {/* Progress indicator */}
@@ -802,6 +805,10 @@ export default function BookPage() {
                   <span>-${(discount / 100).toFixed(2)}</span>
                 </div>
               )}
+              <div className="flex justify-between mb-2">
+                <span>Delivery & Pickup Fee</span>
+                <span>${(deliveryFee / 100).toFixed(2)}</span>
+              </div>
               <div className="flex justify-between mb-2">
                 <span>Tax ({(taxRate * 100).toFixed(1)}%)</span>
                 <span>${(tax / 100).toFixed(2)}</span>

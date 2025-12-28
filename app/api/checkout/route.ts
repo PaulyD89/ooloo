@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       cart,
       subtotal,
       discount,
+      deliveryFee,
       tax,
       total,
       promoCodeId
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
         return_window: returnWindow,
         subtotal,
         discount: discount || 0,
+        delivery_fee: deliveryFee || 1999,
         promo_code_id: promoCodeId || null,
         tax,
         total,
