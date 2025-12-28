@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '../../lib/supabase'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import Image from 'next/image'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -71,6 +72,7 @@ type City = {
 type Product = {
   id: string
   name: string
+  slug: string
   description: string
   daily_rate: number
   image_url: string | null
@@ -125,10 +127,73 @@ function CheckoutForm({ orderId }: { orderId: string }) {
   )
 }
 
+// Image gallery modal component
+function ImageGallery({ product, onClose }: { product: Product, onClose: () => void }) {
+  const [selectedImage, setSelectedImage] = useState(0)
+  
+  // Build image URLs based on product slug
+  const baseUrl = product.image_url?.replace('-front.jpg', '') || ''
+  const images = product.slug === 'set' 
+    ? [{ url: `${baseUrl}-front.jpg`, label: 'Front' }]
+    : [
+        { url: `${baseUrl}-front.jpg`, label: 'Front' },
+        { url: `${baseUrl}-side.jpg`, label: 'Side' },
+        { url: `${baseUrl}-inside.jpg`, label: 'Inside' },
+        { url: `${baseUrl}-scale.jpg`, label: 'Scale' },
+      ]
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h3 className="font-semibold text-lg">{product.name}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+        </div>
+        
+        <div className="p-4">
+          {/* Main image */}
+          <div className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
+            <img
+              src={images[selectedImage].url}
+              alt={`${product.name} - ${images[selectedImage].label}`}
+              className="w-full h-full object-contain"
+            />
+          </div>
+          
+          {/* Thumbnails */}
+          {images.length > 1 && (
+            <div className="flex gap-2">
+              {images.map((img, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedImage(index)}
+                  className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 ${
+                    selectedImage === index ? 'border-black' : 'border-transparent'
+                  }`}
+                >
+                  <img
+                    src={img.url}
+                    alt={img.label}
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs py-1 text-center">
+                    {img.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BookPage() {
   const [step, setStep] = useState(1)
   const [cities, setCities] = useState<City[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [galleryProduct, setGalleryProduct] = useState<Product | null>(null)
   
   // Form state - city selection and dates
   const [deliveryCitySelect, setDeliveryCitySelect] = useState('')
@@ -419,12 +484,32 @@ export default function BookPage() {
 
             <div className="space-y-4">
               {products.map(product => (
-                <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div key={product.id} className="flex items-center gap-4 p-4 border rounded-lg">
+                  {/* Product Image */}
+                  {product.image_url && (
+                    <button
+                      onClick={() => setGalleryProduct(product)}
+                      className="relative w-24 h-24 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 hover:opacity-80 transition"
+                    >
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                        +{product.slug === 'set' ? '0' : '3'}
+                      </span>
+                    </button>
+                  )}
+                  
+                  {/* Product Info */}
+                  <div className="flex-1">
                     <h3 className="font-semibold">{product.name}</h3>
                     <p className="text-sm text-gray-600">{product.description}</p>
                     <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
                   </div>
+                  
+                  {/* Quantity Controls */}
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={() => updateCart(product.id, -1)}
@@ -761,6 +846,14 @@ export default function BookPage() {
           </div>
         )}
       </div>
+
+      {/* Image Gallery Modal */}
+      {galleryProduct && (
+        <ImageGallery 
+          product={galleryProduct} 
+          onClose={() => setGalleryProduct(null)} 
+        />
+      )}
     </main>
   )
 }
