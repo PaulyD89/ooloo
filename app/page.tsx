@@ -5,8 +5,14 @@ export default function Home() {
     <main className="min-h-screen bg-white">
       {/* Header */}
       <header className="p-6">
-        <h1 className="text-2xl font-bold">ooloo</h1>
-      </header>
+  <a href="/">
+    <img 
+      src="/oolooaltlogowithtag.png" 
+      alt="ooloo - Rent the luggage. Own the trip." 
+      className="h-12"
+    />
+  </a>
+</header>
 
       {/* Hero */}
       <section className="px-6 py-20 max-w-2xl mx-auto text-center">
