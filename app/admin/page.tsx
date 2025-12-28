@@ -315,7 +315,7 @@ export default function AdminPage() {
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-6">
             <a href="/">
-              <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
+              <img src="/oolooicon.png" alt="ooloo" className="h-12" />
             </a>
             <nav className="flex gap-4">
               <span className="font-medium text-black">Orders</span>

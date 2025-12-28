@@ -437,7 +437,7 @@ export default function BookPage() {
       <header className="p-6 border-b">
         <a href="/">
           <img 
-            src="/oolooicon.jpg" 
+            src="/oolooicon.png" 
             alt="ooloo" 
             className="h-12"
           />

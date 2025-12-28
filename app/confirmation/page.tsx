@@ -12,7 +12,7 @@ function ConfirmationContent() {
     <main className="min-h-screen bg-white">
       <header className="p-6 border-b">
   <a href="/">
-    <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
+    <img src="/oolooicon.png" alt="ooloo" className="h-12" />
   </a>
 </header>
 

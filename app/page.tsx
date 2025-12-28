@@ -7,7 +7,7 @@ export default function Home() {
       <header className="p-6">
         <a href="/">
           <img 
-            src="/oolooicon.jpg" 
+            src="/oolooicon.png" 
             alt="ooloo" 
             className="h-16"
           />
@@ -114,7 +114,7 @@ export default function Home() {
       <footer className="px-6 py-12 bg-gray-900 text-gray-400">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">
-            <img src="/oolooicon.jpg" alt="ooloo" className="h-10 rounded" />
+            <img src="/oolooicon.png" alt="ooloo" className="h-10 rounded" />
             <span className="text-white font-medium">ooloo</span>
           </div>
           <p className="text-sm">© 2025 ooloo. All rights reserved.</p>
