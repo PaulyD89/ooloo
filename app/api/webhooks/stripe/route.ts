@@ -33,22 +33,75 @@ export async function POST(request: NextRequest) {
   // Handle the event
   switch (event.type) {
     case 'payment_intent.succeeded': {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent
-      
-      // Update order status to confirmed
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'confirmed' })
-        .eq('stripe_payment_intent_id', paymentIntent.id)
-        .eq('status', 'pending')
+  const paymentIntent = event.data.object as Stripe.PaymentIntent
+  
+  // Get the order with all details
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .select(`
+      *,
+      delivery_city:cities!delivery_city_id(name),
+      return_city:cities!return_city_id(name)
+    `)
+    .eq('stripe_payment_intent_id', paymentIntent.id)
+    .single()
 
-      if (error) {
-        console.error('Error updating order:', error)
-      } else {
-        console.log('Order confirmed for payment:', paymentIntent.id)
-      }
-      break
-    }
+  if (orderError || !order) {
+    console.error('Order not found:', orderError)
+    break
+  }
+
+  // Update order status to confirmed
+  await supabase
+    .from('orders')
+    .update({ status: 'confirmed' })
+    .eq('id', order.id)
+
+  // Get order items
+  const { data: orderItems } = await supabase
+    .from('order_items')
+    .select(`
+      *,
+      product:products!product_id(name)
+    `)
+    .eq('order_id', order.id)
+
+  const items = orderItems?.map(item => ({
+    name: item.product?.name || 'Product',
+    quantity: item.quantity,
+    lineTotal: item.line_total
+  })) || []
+
+  // Send confirmation email
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'https://ooloo.vercel.app'}/api/send-confirmation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerEmail: order.customer_email,
+        customerName: order.customer_name,
+        orderId: order.id,
+        deliveryDate: order.delivery_date,
+        returnDate: order.return_date,
+        deliveryAddress: order.delivery_address,
+        returnAddress: order.return_address,
+        deliveryWindow: order.delivery_window,
+        returnWindow: order.return_window,
+        items,
+        subtotal: order.subtotal,
+        discount: order.discount || 0,
+        deliveryFee: order.delivery_fee || 1999,
+        tax: order.tax,
+        total: order.total
+      })
+    })
+    console.log('Confirmation email sent for order:', order.id)
+  } catch (emailError) {
+    console.error('Failed to send confirmation email:', emailError)
+  }
+
+  break
+}
 
     case 'payment_intent.payment_failed': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent
