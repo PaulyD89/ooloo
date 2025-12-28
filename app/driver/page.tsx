@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '../../lib/supabase'
 import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
@@ -27,6 +27,21 @@ type Driver = {
   city: { id: string; name: string } | null
 }
 
+type RouteStop = {
+  order: Order
+  type: 'delivery' | 'pickup'
+  address: string
+  window: string
+  position?: google.maps.LatLngLiteral
+}
+
+declare global {
+  interface Window {
+    google: typeof google
+    initMap: () => void
+  }
+}
+
 export default function DriverPage() {
   const [user, setUser] = useState<User | null>(null)
   const [driver, setDriver] = useState<Driver | null>(null)
@@ -35,9 +50,37 @@ export default function DriverPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'map' | 'list'>('list')
+  const [routeStops, setRouteStops] = useState<RouteStop[]>([])
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const [routeLoading, setRouteLoading] = useState(false)
+
+  const mapRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<google.maps.Map | null>(null)
+  const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null)
+  const markersRef = useRef<google.maps.Marker[]>([])
 
   const router = useRouter()
   const supabase = createClient()
+
+  // Load Google Maps script
+  useEffect(() => {
+    if (window.google) {
+      setMapLoaded(true)
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`
+    script.async = true
+    script.defer = true
+    script.onload = () => setMapLoaded(true)
+    document.head.appendChild(script)
+
+    return () => {
+      // Cleanup if needed
+    }
+  }, [])
 
   useEffect(() => {
     checkAuth()
@@ -49,6 +92,20 @@ export default function DriverPage() {
     }
   }, [driver, selectedDate])
 
+  // Initialize map when tab switches to map and map is loaded
+  useEffect(() => {
+    if (activeTab === 'map' && mapLoaded && mapRef.current && !mapInstanceRef.current) {
+      initializeMap()
+    }
+  }, [activeTab, mapLoaded])
+
+  // Update route when orders change and map is visible
+  useEffect(() => {
+    if (activeTab === 'map' && mapInstanceRef.current && orders.length > 0) {
+      calculateRoute()
+    }
+  }, [activeTab, orders, selectedDate])
+
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -58,7 +115,6 @@ export default function DriverPage() {
     
     setUser(user)
     
-    // Check if user is a driver
     const { data: driverData, error } = await supabase
       .from('drivers')
       .select(`
@@ -70,7 +126,6 @@ export default function DriverPage() {
       .single()
 
     if (error || !driverData) {
-      // Not a driver - check if admin (admins can access with city selector)
       const { data: roleData } = await supabase
         .from('user_roles')
         .select('role')
@@ -79,10 +134,8 @@ export default function DriverPage() {
         .single()
 
       if (roleData) {
-        // Admin user - redirect to admin page
         router.push('/admin')
       } else {
-        // Neither driver nor admin
         setAccessDenied(true)
       }
       setAuthLoading(false)
@@ -109,7 +162,6 @@ export default function DriverPage() {
       .order('delivery_window', { ascending: true })
 
     if (data) {
-      // Filter to only show orders for driver's city
       const filtered = data.filter(order => 
         (order.delivery_date === selectedDate && order.delivery_city?.id === driver.city_id) ||
         (order.return_date === selectedDate && order.return_city?.id === driver.city_id)
@@ -118,6 +170,235 @@ export default function DriverPage() {
     }
     if (error) console.error('Error loading orders:', error)
     setLoading(false)
+  }
+
+  function initializeMap() {
+    if (!mapRef.current || !window.google) return
+
+    // Default to LA, will be updated based on orders
+    const defaultCenter = { lat: 34.0522, lng: -118.2437 }
+
+    mapInstanceRef.current = new google.maps.Map(mapRef.current, {
+      center: defaultCenter,
+      zoom: 11,
+      styles: [
+        {
+          featureType: 'poi',
+          elementType: 'labels',
+          stylers: [{ visibility: 'off' }]
+        }
+      ]
+    })
+
+    directionsRendererRef.current = new google.maps.DirectionsRenderer({
+      map: mapInstanceRef.current,
+      suppressMarkers: true, // We'll add custom markers
+      polylineOptions: {
+        strokeColor: '#0891b2',
+        strokeWeight: 5
+      }
+    })
+  }
+
+  async function calculateRoute() {
+    if (!mapInstanceRef.current || !window.google) return
+
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.setMap(null))
+    markersRef.current = []
+
+    // Build stops list - deliveries first (sorted by window), then pickups
+    const stops: RouteStop[] = []
+
+    // Add deliveries
+    deliveries.forEach(order => {
+      stops.push({
+        order,
+        type: 'delivery',
+        address: order.delivery_address,
+        window: order.delivery_window
+      })
+    })
+
+    // Add pickups
+    pickups.forEach(order => {
+      stops.push({
+        order,
+        type: 'pickup',
+        address: order.return_address,
+        window: order.return_window
+      })
+    })
+
+    if (stops.length === 0) {
+      setRouteStops([])
+      return
+    }
+
+    setRouteLoading(true)
+
+    // Geocode all addresses
+    const geocoder = new google.maps.Geocoder()
+    const geocodedStops: RouteStop[] = []
+
+    for (const stop of stops) {
+      try {
+        const result = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
+          geocoder.geocode({ address: stop.address }, (results, status) => {
+            if (status === 'OK' && results) {
+              resolve(results)
+            } else {
+              reject(status)
+            }
+          })
+        })
+
+        if (result[0]) {
+          geocodedStops.push({
+            ...stop,
+            position: {
+              lat: result[0].geometry.location.lat(),
+              lng: result[0].geometry.location.lng()
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Geocoding error for:', stop.address, error)
+        // Still add the stop without position
+        geocodedStops.push(stop)
+      }
+    }
+
+    setRouteStops(geocodedStops)
+
+    // Add markers for each stop
+    geocodedStops.forEach((stop, index) => {
+      if (!stop.position || !mapInstanceRef.current) return
+
+      const isCompleted = stop.type === 'delivery' 
+        ? ['delivered', 'out_for_pickup', 'returned'].includes(stop.order.status)
+        : stop.order.status === 'returned'
+
+      const marker = new google.maps.Marker({
+        position: stop.position,
+        map: mapInstanceRef.current,
+        label: {
+          text: String(index + 1),
+          color: 'white',
+          fontWeight: 'bold'
+        },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 18,
+          fillColor: isCompleted ? '#9ca3af' : (stop.type === 'delivery' ? '#0891b2' : '#f97316'),
+          fillOpacity: 1,
+          strokeColor: 'white',
+          strokeWeight: 2
+        }
+      })
+
+      // Add info window
+      const infoWindow = new google.maps.InfoWindow({
+        content: `
+          <div style="padding: 8px; max-width: 200px;">
+            <strong>${stop.order.customer_name}</strong><br/>
+            <span style="color: ${stop.type === 'delivery' ? '#0891b2' : '#f97316'}">
+              ${stop.type === 'delivery' ? '📦 Delivery' : '🔄 Pickup'}
+            </span><br/>
+            <small>${formatWindow(stop.window)}</small><br/>
+            <small style="color: #666;">${stop.address}</small>
+          </div>
+        `
+      })
+
+      marker.addListener('click', () => {
+        infoWindow.open(mapInstanceRef.current, marker)
+      })
+
+      markersRef.current.push(marker)
+    })
+
+    // Calculate optimized route if we have 2+ stops with positions
+    const stopsWithPositions = geocodedStops.filter(s => s.position)
+    
+    if (stopsWithPositions.length >= 2) {
+      const directionsService = new google.maps.DirectionsService()
+
+      const origin = stopsWithPositions[0].position!
+      const destination = stopsWithPositions[stopsWithPositions.length - 1].position!
+      const waypoints = stopsWithPositions.slice(1, -1).map(stop => ({
+        location: stop.position!,
+        stopover: true
+      }))
+
+      try {
+        const result = await directionsService.route({
+          origin,
+          destination,
+          waypoints,
+          optimizeWaypoints: true, // This optimizes the route!
+          travelMode: google.maps.TravelMode.DRIVING
+        })
+
+        if (directionsRendererRef.current) {
+          directionsRendererRef.current.setDirections(result)
+        }
+
+        // Reorder stops based on optimized route
+        if (result.routes[0]?.waypoint_order) {
+          const optimizedOrder = result.routes[0].waypoint_order
+          const middleStops = stopsWithPositions.slice(1, -1)
+          const reorderedMiddle = optimizedOrder.map(i => middleStops[i])
+          const optimizedStops = [
+            stopsWithPositions[0],
+            ...reorderedMiddle,
+            stopsWithPositions[stopsWithPositions.length - 1]
+          ]
+          
+          // Update markers with new numbers
+          markersRef.current.forEach(marker => marker.setMap(null))
+          markersRef.current = []
+          
+          optimizedStops.forEach((stop, index) => {
+            if (!stop.position || !mapInstanceRef.current) return
+
+            const isCompleted = stop.type === 'delivery' 
+              ? ['delivered', 'out_for_pickup', 'returned'].includes(stop.order.status)
+              : stop.order.status === 'returned'
+
+            const marker = new google.maps.Marker({
+              position: stop.position,
+              map: mapInstanceRef.current,
+              label: {
+                text: String(index + 1),
+                color: 'white',
+                fontWeight: 'bold'
+              },
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 18,
+                fillColor: isCompleted ? '#9ca3af' : (stop.type === 'delivery' ? '#0891b2' : '#f97316'),
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+              }
+            })
+
+            markersRef.current.push(marker)
+          })
+
+          setRouteStops(optimizedStops)
+        }
+      } catch (error) {
+        console.error('Directions error:', error)
+      }
+    } else if (stopsWithPositions.length === 1) {
+      // Just center on the single stop
+      mapInstanceRef.current.setCenter(stopsWithPositions[0].position!)
+      mapInstanceRef.current.setZoom(14)
+    }
+
+    setRouteLoading(false)
   }
 
   async function markDelivered(orderId: string) {
@@ -204,13 +485,13 @@ export default function DriverPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white border-b p-4">
-  <div className="max-w-2xl mx-auto flex justify-between items-center">
-    <div>
-      <a href="/">
-        <img src="/oolooicon.jpg" alt="ooloo" className="h-10" />
-      </a>
+        <div className="max-w-2xl mx-auto flex justify-between items-center">
+          <div>
+            <a href="/">
+              <img src="/oolooicon.jpg" alt="ooloo" className="h-10" />
+            </a>
             <p className="text-sm text-gray-500">{driver?.city?.name}</p>
           </div>
           <button 
@@ -222,10 +503,9 @@ export default function DriverPage() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto p-4">
+      <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full">
         {/* Date Selection */}
-        <div className="bg-white p-4 rounded-lg border mb-6">
-          <label className="block text-sm font-medium mb-2">Date</label>
+        <div className="bg-white p-4 border-b">
           <input
             type="date"
             value={selectedDate}
@@ -234,13 +514,43 @@ export default function DriverPage() {
           />
         </div>
 
+        {/* Tab Switcher */}
+        <div className="bg-white border-b flex">
+          <button
+            onClick={() => setActiveTab('list')}
+            className={`flex-1 py-3 text-center font-medium ${
+              activeTab === 'list' 
+                ? 'text-cyan-600 border-b-2 border-cyan-600' 
+                : 'text-gray-500'
+            }`}
+          >
+            List View
+          </button>
+          <button
+            onClick={() => setActiveTab('map')}
+            className={`flex-1 py-3 text-center font-medium ${
+              activeTab === 'map' 
+                ? 'text-cyan-600 border-b-2 border-cyan-600' 
+                : 'text-gray-500'
+            }`}
+          >
+            Map View
+          </button>
+        </div>
+
         {loading ? (
-          <p className="text-center py-8">Loading...</p>
-        ) : (
-          <>
+          <div className="flex-1 flex items-center justify-center">
+            <p>Loading...</p>
+          </div>
+        ) : activeTab === 'list' ? (
+          /* List View */
+          <div className="flex-1 overflow-y-auto p-4">
             {/* Deliveries */}
             <div className="mb-8">
-              <h2 className="text-lg font-semibold mb-4">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span className="w-6 h-6 bg-cyan-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">📦</span>
+                </span>
                 Deliveries ({deliveries.length})
               </h2>
               {deliveries.length === 0 ? (
@@ -254,7 +564,7 @@ export default function DriverPage() {
                           <p className="font-semibold">{order.customer_name}</p>
                           <p className="text-sm text-gray-600">{order.customer_phone}</p>
                         </div>
-                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        <span className="text-sm bg-cyan-100 text-cyan-800 px-2 py-1 rounded">
                           {formatWindow(order.delivery_window)}
                         </span>
                       </div>
@@ -273,7 +583,10 @@ export default function DriverPage() {
 
             {/* Pickups */}
             <div className="mb-8">
-              <h2 className="text-lg font-semibold mb-4">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">🔄</span>
+                </span>
                 Pickups ({pickups.length})
               </h2>
               {pickups.length === 0 ? (
@@ -327,7 +640,96 @@ export default function DriverPage() {
                 </div>
               </div>
             )}
-          </>
+          </div>
+        ) : (
+          /* Map View */
+          <div className="flex-1 flex flex-col">
+            {/* Map */}
+            <div 
+              ref={mapRef} 
+              className="flex-1 min-h-[300px] bg-gray-200"
+            >
+              {!mapLoaded && (
+                <div className="h-full flex items-center justify-center">
+                  <p>Loading map...</p>
+                </div>
+              )}
+            </div>
+
+            {/* Route List */}
+            <div className="bg-white border-t max-h-[40vh] overflow-y-auto">
+              <div className="p-4 border-b bg-gray-50">
+                <h3 className="font-semibold">
+                  {routeLoading ? 'Calculating route...' : `Optimized Route (${routeStops.length} stops)`}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  <span className="inline-block w-3 h-3 bg-cyan-500 rounded-full mr-1"></span> Delivery
+                  <span className="inline-block w-3 h-3 bg-orange-500 rounded-full ml-3 mr-1"></span> Pickup
+                </p>
+              </div>
+              
+              {routeStops.length === 0 ? (
+                <p className="p-4 text-gray-500">No stops for today</p>
+              ) : (
+                <div className="divide-y">
+                  {routeStops.map((stop, index) => {
+                    const isCompleted = stop.type === 'delivery' 
+                      ? ['delivered', 'out_for_pickup', 'returned'].includes(stop.order.status)
+                      : stop.order.status === 'returned'
+
+                    return (
+                      <div 
+                        key={`${stop.order.id}-${stop.type}`} 
+                        className={`p-4 flex gap-4 ${isCompleted ? 'opacity-50' : ''}`}
+                      >
+                        <div 
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
+                            isCompleted 
+                              ? 'bg-gray-400' 
+                              : stop.type === 'delivery' 
+                                ? 'bg-cyan-500' 
+                                : 'bg-orange-500'
+                          }`}
+                        >
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium">{stop.order.customer_name}</p>
+                              <p className="text-sm text-gray-500">
+                                {stop.type === 'delivery' ? '📦 Delivery' : '🔄 Pickup'} • {formatWindow(stop.window)}
+                              </p>
+                            </div>
+                            {!isCompleted && (
+                              <button
+                                onClick={() => stop.type === 'delivery' 
+                                  ? markDelivered(stop.order.id) 
+                                  : markPickedUp(stop.order.id)
+                                }
+                                className="text-sm bg-green-600 text-white px-3 py-1 rounded"
+                              >
+                                {stop.type === 'delivery' ? 'Delivered' : 'Picked Up'}
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">{stop.address}</p>
+                          <a 
+                            href={`https://maps.google.com/?q=${encodeURIComponent(stop.address)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-cyan-600 hover:underline"
+                          >
+                            Open in Google Maps →
+                          </a>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
