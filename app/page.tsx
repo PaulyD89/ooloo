@@ -15,16 +15,18 @@ export default function Home() {
       </header>
 
       {/* Hero */}
-      <section className="px-6 py-16 max-w-2xl mx-auto text-center">
-        <img 
-          src="/oolooaltlogowithtag.png?v=3" 
-          alt="ooloo - Rent the luggage. Own the trip." 
-          className="h-48 mx-auto mb-10"
-        />
-        <h2 className="text-4xl font-bold mb-6 text-gray-900">
-          Rent luggage for your next trip
-        </h2>
-        <p className="text-xl text-gray-600 mb-10">
+<section className="px-6 py-16 max-w-3xl mx-auto text-center">
+  <img 
+    src="/oolooaltlogowithtag.png?v=3" 
+    alt="ooloo - Rent the luggage. Own the trip." 
+    className="h-48 mx-auto mb-10"
+  />
+  <img 
+    src="/rentluggage.png" 
+    alt="Rent Luggage for your Next Trip" 
+    className="h-24 md:h-32 mx-auto mb-8"
+  />
+  <p className="text-xl text-gray-600 mb-10">
           Premium luggage delivered to your door. Return it when you're back.
           No storage, no hassle.
         </p>
