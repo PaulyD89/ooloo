@@ -8,91 +8,68 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { orderId, cityId, deliveryDate, returnDate, cart, products } = await request.json()
+    const { cityId, deliveryDate, returnDate } = await request.json()
 
-    const reservations: { inventory_item_id: string; order_id: string; start_date: string; end_date: string }[] = []
-
-    // Get product slugs for set handling
-    const { data: productList } = await supabase
+    // Get all products
+    const { data: products } = await supabase
       .from('products')
-      .select('id, slug')
+      .select('id, name, slug')
+      .eq('is_active', true)
 
-    const productMap = new Map(productList?.map(p => [p.id, p.slug]) || [])
-    const carryonProductId = productList?.find(p => p.slug === 'carryon')?.id
-    const largeProductId = productList?.find(p => p.slug === 'large')?.id
-
-    for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {
-      const slug = productMap.get(productId)
-      let itemsToReserve: { productId: string; quantity: number }[] = []
-
-      if (slug === 'set') {
-        // Set needs 1 carryon + 1 large per set
-        itemsToReserve = [
-          { productId: carryonProductId!, quantity: details.quantity },
-          { productId: largeProductId!, quantity: details.quantity }
-        ]
-      } else {
-        itemsToReserve = [{ productId, quantity: details.quantity }]
-      }
-
-      for (const item of itemsToReserve) {
-        // Find available inventory items not reserved for these dates
-        const { data: reservedItemIds } = await supabase
-          .from('reservations')
-          .select('inventory_item_id')
-          .gte('end_date', deliveryDate)
-          .lte('start_date', returnDate)
-
-        const excludeIds = reservedItemIds?.map(r => r.inventory_item_id) || []
-
-        let query = supabase
-          .from('inventory_items')
-          .select('id')
-          .eq('city_id', cityId)
-          .eq('product_id', item.productId)
-          .eq('status', 'available')
-          .limit(item.quantity)
-
-        if (excludeIds.length > 0) {
-          query = query.not('id', 'in', `(${excludeIds.join(',')})`)
-        }
-
-        const { data: availableItems } = await query
-
-        if (!availableItems || availableItems.length < item.quantity) {
-          return NextResponse.json({ 
-            error: `Not enough inventory available`,
-            needed: item.quantity,
-            available: availableItems?.length || 0
-          }, { status: 400 })
-        }
-
-        // Create reservations
-        for (const invItem of availableItems) {
-          reservations.push({
-            inventory_item_id: invItem.id,
-            order_id: orderId,
-            start_date: deliveryDate,
-            end_date: returnDate
-          })
-        }
-      }
+    if (!products) {
+      return NextResponse.json({ error: 'Failed to load products' }, { status: 500 })
     }
 
-    // Insert all reservations
-    const { error: reserveError } = await supabase
+    const availability: Record<string, number> = {}
+
+    // Get all reservations that overlap with the requested dates
+    const { data: overlappingReservations } = await supabase
       .from('reservations')
-      .insert(reservations)
+      .select('inventory_item_id')
+      .lte('start_date', returnDate)
+      .gte('end_date', deliveryDate)
 
-    if (reserveError) {
-      console.error('Reservation error:', reserveError)
-      return NextResponse.json({ error: 'Failed to reserve inventory' }, { status: 500 })
+    const reservedItemIds = new Set(overlappingReservations?.map(r => r.inventory_item_id) || [])
+
+    for (const product of products) {
+      if (product.slug === 'set') {
+        // Set availability calculated after other products
+        continue
+      }
+
+      // Get all available inventory items for this product in this city
+      const { data: inventoryItems } = await supabase
+        .from('inventory_items')
+        .select('id')
+        .eq('city_id', cityId)
+        .eq('product_id', product.id)
+        .eq('status', 'available')
+
+      if (inventoryItems) {
+        // Count items that are NOT reserved for the requested dates
+        const availableCount = inventoryItems.filter(item => !reservedItemIds.has(item.id)).length
+        availability[product.id] = availableCount
+      } else {
+        availability[product.id] = 0
+      }
     }
 
-    return NextResponse.json({ success: true, reservations: reservations.length })
+    // Calculate set availability (min of carryon and large)
+    const carryonProduct = products.find(p => p.slug === 'carryon')
+    const largeProduct = products.find(p => p.slug === 'large')
+    const setProduct = products.find(p => p.slug === 'set')
+
+    if (setProduct && carryonProduct && largeProduct) {
+      availability[setProduct.id] = Math.min(
+        availability[carryonProduct.id] || 0,
+        availability[largeProduct.id] || 0
+      )
+    }
+
+    return NextResponse.json({ availability })
 
   } catch (error) {
-    console.error('Reserve inventory error:', error)
-    return NextResponse.json({ error: 'Failed to reserve inventory' }, { status: 500 })
+    console.error('Availability check error:', error)
+    return NextResponse.json({ error: 'Failed to check availability' }, { status: 500 })
   }
 }
