@@ -444,7 +444,7 @@ export default function BookPage() {
         </a>
       </header>
 
-      <div className="max-w-2xl mx-auto p-6">
+      <div className="max-w-2xl mx-auto p-4 sm:p-6">
         <div className="flex gap-2 mb-8">
           {[1, 2, 3, 4].map(s => (
             <div 
@@ -488,24 +488,24 @@ export default function BookPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Delivery Date</label>
-                <input 
-                  type="date"
-                  value={deliveryDate}
-                  onChange={e => setDeliveryDate(e.target.value)}
-                  className="w-full p-3 border rounded-lg"
-                />
-              </div>
+  <label className="block text-sm font-medium mb-2">Delivery Date</label>
+  <input 
+    type="date"
+    value={deliveryDate}
+    onChange={e => setDeliveryDate(e.target.value)}
+    className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
+  />
+</div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Return Date</label>
-                <input 
-                  type="date"
-                  value={returnDate}
-                  onChange={e => setReturnDate(e.target.value)}
-                  className="w-full p-3 border rounded-lg"
-                />
-              </div>
+<div>
+  <label className="block text-sm font-medium mb-2">Return Date</label>
+  <input 
+    type="date"
+    value={returnDate}
+    onChange={e => setReturnDate(e.target.value)}
+    className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
+  />
+</div>
             </div>
 
             <button
