@@ -1,0 +1,766 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { createClient } from '../../lib/supabase'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+
+const US_STATES = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' },
+  { code: 'DC', name: 'Washington DC' },
+]
+
+type City = {
+  id: string
+  name: string
+  slug: string
+  tax_rate: number
+}
+
+type Product = {
+  id: string
+  name: string
+  description: string
+  daily_rate: number
+  image_url: string | null
+}
+
+type PromoCode = {
+  id: string
+  code: string
+  discount_type: 'percent' | 'fixed'
+  discount_value: number
+  min_order_total: number | null
+}
+
+function CheckoutForm({ orderId }: { orderId: string }) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stripe || !elements) return
+
+    setLoading(true)
+    setError('')
+
+    const { error: submitError } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/confirmation?order=${orderId}`,
+      },
+    })
+
+    if (submitError) {
+      setError(submitError.message || 'Payment failed')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <PaymentElement />
+      {error && <p className="text-red-500 mt-4">{error}</p>}
+      <button
+        type="submit"
+        disabled={!stripe || loading}
+        className="w-full mt-6 bg-black text-white py-4 rounded-lg font-medium disabled:bg-gray-300"
+      >
+        {loading ? 'Processing...' : 'Pay Now'}
+      </button>
+    </form>
+  )
+}
+
+export default function BookPage() {
+  const [step, setStep] = useState(1)
+  const [cities, setCities] = useState<City[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  
+  // Form state - city selection and dates
+  const [deliveryCitySelect, setDeliveryCitySelect] = useState('')
+  const [returnCitySelect, setReturnCitySelect] = useState('')
+  const [deliveryDate, setDeliveryDate] = useState('')
+  const [returnDate, setReturnDate] = useState('')
+  const [cart, setCart] = useState<Record<string, number>>({})
+  
+  // Customer details
+  const [customerName, setCustomerName] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [deliveryStreet, setDeliveryStreet] = useState('')
+  const [deliveryCityAddress, setDeliveryCityAddress] = useState('')
+  const [deliveryState, setDeliveryState] = useState('')
+  const [deliveryZip, setDeliveryZip] = useState('')
+  const [returnStreet, setReturnStreet] = useState('')
+  const [returnCityAddress, setReturnCityAddress] = useState('')
+  const [returnState, setReturnState] = useState('')
+  const [returnZip, setReturnZip] = useState('')
+  const [deliveryWindow, setDeliveryWindow] = useState('morning')
+  const [returnWindow, setReturnWindow] = useState('morning')
+  const [sameAsDelivery, setSameAsDelivery] = useState(false)
+
+  // Promo code state
+  const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null)
+  const [promoError, setPromoError] = useState('')
+  const [promoLoading, setPromoLoading] = useState(false)
+
+  // Payment state
+  const [clientSecret, setClientSecret] = useState('')
+  const [orderId, setOrderId] = useState('')
+
+  const supabase = createClient()
+
+  // Load cities and products from Supabase
+  useEffect(() => {
+    async function loadData() {
+      const [citiesRes, productsRes] = await Promise.all([
+        supabase.from('cities').select('*').eq('is_active', true),
+        supabase.from('products').select('*').eq('is_active', true).order('sort_order')
+      ])
+      
+      if (citiesRes.data) setCities(citiesRes.data)
+      if (productsRes.data) setProducts(productsRes.data)
+    }
+    
+    loadData()
+  }, [])
+
+  // Handle same as delivery checkbox
+  useEffect(() => {
+    if (sameAsDelivery) {
+      setReturnStreet(deliveryStreet)
+      setReturnCityAddress(deliveryCityAddress)
+      setReturnState(deliveryState)
+      setReturnZip(deliveryZip)
+    }
+  }, [sameAsDelivery, deliveryStreet, deliveryCityAddress, deliveryState, deliveryZip])
+
+  // Calculate rental days
+  const days = deliveryDate && returnDate 
+    ? Math.max(1, Math.ceil((new Date(returnDate).getTime() - new Date(deliveryDate).getTime()) / (1000 * 60 * 60 * 24)))
+    : 0
+
+  // Get tax rate from selected delivery city
+  const selectedCity = cities.find(c => c.id === deliveryCitySelect)
+  const taxRate = selectedCity?.tax_rate || 0.095
+
+  // Calculate subtotal
+  const subtotal = products.reduce((sum, product) => {
+    const qty = cart[product.id] || 0
+    return sum + (qty * product.daily_rate * days)
+  }, 0)
+
+  // Calculate discount
+  const discount = appliedPromo
+    ? appliedPromo.discount_type === 'percent'
+      ? Math.round(subtotal * (appliedPromo.discount_value / 100))
+      : appliedPromo.discount_value
+    : 0
+
+  const subtotalAfterDiscount = subtotal - discount
+  const tax = Math.round(subtotalAfterDiscount * taxRate)
+  const total = subtotalAfterDiscount + tax
+
+  const updateCart = (productId: string, delta: number) => {
+    setCart(prev => ({
+      ...prev,
+      [productId]: Math.max(0, (prev[productId] || 0) + delta)
+    }))
+  }
+
+  const applyPromoCode = async () => {
+    if (!promoCodeInput.trim()) return
+    
+    setPromoLoading(true)
+    setPromoError('')
+    
+    const { data, error } = await supabase
+      .from('promo_codes')
+      .select('*')
+      .eq('code', promoCodeInput.toUpperCase().trim())
+      .eq('is_active', true)
+      .single()
+
+    if (error || !data) {
+      setPromoError('Invalid promo code')
+      setPromoLoading(false)
+      return
+    }
+
+    // Check if expired
+    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+      setPromoError('This promo code has expired')
+      setPromoLoading(false)
+      return
+    }
+
+    // Check usage limit
+    if (data.usage_limit && data.times_used >= data.usage_limit) {
+      setPromoError('This promo code has reached its usage limit')
+      setPromoLoading(false)
+      return
+    }
+
+    // Check minimum order total
+    if (data.min_order_total && subtotal < data.min_order_total) {
+      setPromoError(`Minimum order of $${(data.min_order_total / 100).toFixed(2)} required`)
+      setPromoLoading(false)
+      return
+    }
+
+    setAppliedPromo(data)
+    setPromoLoading(false)
+  }
+
+  const removePromoCode = () => {
+    setAppliedPromo(null)
+    setPromoCodeInput('')
+    setPromoError('')
+  }
+
+  const isStep3Valid = customerName && customerEmail && customerPhone && 
+    deliveryStreet && deliveryCityAddress && deliveryState && deliveryZip &&
+    returnStreet && returnCityAddress && returnState && returnZip
+
+  const handleCheckout = async () => {
+    const fullDeliveryAddress = `${deliveryStreet}, ${deliveryCityAddress}, ${deliveryState} ${deliveryZip}`
+    const fullReturnAddress = `${returnStreet}, ${returnCityAddress}, ${returnState} ${returnZip}`
+
+    // Build cart details for API
+    const cartDetails: Record<string, any> = {}
+    products.forEach(product => {
+      const qty = cart[product.id] || 0
+      if (qty > 0) {
+        cartDetails[product.id] = {
+          quantity: qty,
+          dailyRate: product.daily_rate,
+          days: days
+        }
+      }
+    })
+
+    const response = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerEmail,
+        customerName,
+        customerPhone,
+        deliveryAddress: fullDeliveryAddress,
+        deliveryCityId: deliveryCitySelect,
+        returnAddress: fullReturnAddress,
+        returnCityId: returnCitySelect,
+        deliveryDate,
+        returnDate,
+        deliveryWindow,
+        returnWindow,
+        cart: cartDetails,
+        subtotal,
+        discount,
+        tax,
+        total,
+        promoCodeId: appliedPromo?.id || null
+      })
+    })
+
+    const data = await response.json()
+    
+    if (data.clientSecret) {
+      setClientSecret(data.clientSecret)
+      setOrderId(data.orderId)
+      setStep(4)
+    } else {
+      alert('Error creating order: ' + data.error)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-white">
+      <header className="p-6 border-b">
+        <h1 className="text-2xl font-bold">ooloo</h1>
+      </header>
+
+      <div className="max-w-2xl mx-auto p-6">
+        {/* Progress indicator */}
+        <div className="flex gap-2 mb-8">
+          {[1, 2, 3, 4].map(s => (
+            <div 
+              key={s} 
+              className={`h-2 flex-1 rounded ${s <= step ? 'bg-black' : 'bg-gray-200'}`} 
+            />
+          ))}
+        </div>
+
+        {/* Step 1: City & Dates */}
+        {step === 1 && (
+          <div>
+            <h2 className="text-2xl font-bold mb-6">Where and when?</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Delivery City</label>
+                <select 
+                  value={deliveryCitySelect}
+                  onChange={e => setDeliveryCitySelect(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                >
+                  <option value="">Select a city</option>
+                  {cities.map(city => (
+                    <option key={city.id} value={city.id}>{city.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Return City</label>
+                <select 
+                  value={returnCitySelect}
+                  onChange={e => setReturnCitySelect(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                >
+                  <option value="">Select a city</option>
+                  {cities.map(city => (
+                    <option key={city.id} value={city.id}>{city.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Delivery Date</label>
+                <input 
+                  type="date"
+                  value={deliveryDate}
+                  onChange={e => setDeliveryDate(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Return Date</label>
+                <input 
+                  type="date"
+                  value={returnDate}
+                  onChange={e => setReturnDate(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => setStep(2)}
+              disabled={!deliveryCitySelect || !returnCitySelect || !deliveryDate || !returnDate}
+              className="w-full mt-8 bg-black text-white py-4 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {/* Step 2: Select Luggage */}
+        {step === 2 && (
+          <div>
+            <h2 className="text-2xl font-bold mb-2">Choose your luggage</h2>
+            <p className="text-gray-600 mb-6">{days} day rental</p>
+
+            <div className="space-y-4">
+              {products.map(product => (
+                <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h3 className="font-semibold">{product.name}</h3>
+                    <p className="text-sm text-gray-600">{product.description}</p>
+                    <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateCart(product.id, -1)}
+                      className="w-8 h-8 rounded-full border flex items-center justify-center"
+                    >
+                      -
+                    </button>
+                    <span className="w-6 text-center">{cart[product.id] || 0}</span>
+                    <button 
+                      onClick={() => updateCart(product.id, 1)}
+                      className="w-8 h-8 rounded-full border flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {subtotal > 0 && (
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <div className="flex justify-between font-semibold">
+                  <span>Subtotal</span>
+                  <span>${(subtotal / 100).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-4 mt-8">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 py-4 border rounded-lg font-medium"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setStep(3)}
+                disabled={subtotal === 0}
+                className="flex-1 bg-black text-white py-4 rounded-lg font-medium disabled:bg-gray-300"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Contact & Address */}
+        {step === 3 && (
+          <div>
+            <h2 className="text-2xl font-bold mb-6">Delivery details</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Full Name</label>
+                <input 
+                  type="text" 
+                  value={customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                  className="w-full p-3 border rounded-lg" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <input 
+                  type="email" 
+                  value={customerEmail}
+                  onChange={e => setCustomerEmail(e.target.value)}
+                  className="w-full p-3 border rounded-lg" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Phone</label>
+                <input 
+                  type="tel" 
+                  value={customerPhone}
+                  onChange={e => setCustomerPhone(e.target.value)}
+                  className="w-full p-3 border rounded-lg" 
+                />
+              </div>
+
+              <div className="pt-4 border-t">
+                <h3 className="font-semibold mb-4">Delivery Address</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Street Address</label>
+                    <input 
+                      type="text" 
+                      value={deliveryStreet}
+                      onChange={e => setDeliveryStreet(e.target.value)}
+                      className="w-full p-3 border rounded-lg" 
+                      placeholder="123 Main St, Apt 4" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-6 gap-4">
+                    <div className="col-span-3">
+                      <label className="block text-sm font-medium mb-2">City</label>
+                      <input 
+                        type="text" 
+                        value={deliveryCityAddress}
+                        onChange={e => setDeliveryCityAddress(e.target.value)}
+                        className="w-full p-3 border rounded-lg" 
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium mb-2">State</label>
+                      <select
+                        value={deliveryState}
+                        onChange={e => setDeliveryState(e.target.value)}
+                        className="w-full p-3 border rounded-lg h-[50px]"
+                      >
+                        <option value=""></option>
+                        {US_STATES.map(state => (
+                          <option key={state.code} value={state.code}>{state.code}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-2">ZIP</label>
+                      <input 
+                        type="text" 
+                        value={deliveryZip}
+                        onChange={e => setDeliveryZip(e.target.value)}
+                        className="w-full p-3 border rounded-lg"
+                        placeholder="90210"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Delivery Window</label>
+                    <select 
+                      value={deliveryWindow}
+                      onChange={e => setDeliveryWindow(e.target.value)}
+                      className="w-full p-3 border rounded-lg"
+                    >
+                      <option value="morning">Morning (9am - 12pm)</option>
+                      <option value="afternoon">Afternoon (12pm - 5pm)</option>
+                      <option value="evening">Evening (5pm - 8pm)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold">Return Address</h3>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sameAsDelivery}
+                      onChange={e => setSameAsDelivery(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm text-gray-600">Same as delivery</span>
+                  </label>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Street Address</label>
+                    <input 
+                      type="text" 
+                      value={returnStreet}
+                      onChange={e => {
+                        setSameAsDelivery(false)
+                        setReturnStreet(e.target.value)
+                      }}
+                      className="w-full p-3 border rounded-lg" 
+                      placeholder="123 Main St, Apt 4" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-6 gap-4">
+                    <div className="col-span-3">
+                      <label className="block text-sm font-medium mb-2">City</label>
+                      <input 
+                        type="text" 
+                        value={returnCityAddress}
+                        onChange={e => {
+                          setSameAsDelivery(false)
+                          setReturnCityAddress(e.target.value)
+                        }}
+                        className="w-full p-3 border rounded-lg" 
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium mb-2">State</label>
+                      <select
+                        value={returnState}
+                        onChange={e => {
+                          setSameAsDelivery(false)
+                          setReturnState(e.target.value)
+                        }}
+                        className="w-full p-3 border rounded-lg h-[50px]"
+                      >
+                        <option value=""></option>
+                        {US_STATES.map(state => (
+                          <option key={state.code} value={state.code}>{state.code}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-2">ZIP</label>
+                      <input 
+                        type="text" 
+                        value={returnZip}
+                        onChange={e => {
+                          setSameAsDelivery(false)
+                          setReturnZip(e.target.value)
+                        }}
+                        className="w-full p-3 border rounded-lg"
+                        placeholder="90210"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Return Window</label>
+                    <select 
+                      value={returnWindow}
+                      onChange={e => setReturnWindow(e.target.value)}
+                      className="w-full p-3 border rounded-lg"
+                    >
+                      <option value="morning">Morning (9am - 12pm)</option>
+                      <option value="afternoon">Afternoon (12pm - 5pm)</option>
+                      <option value="evening">Evening (5pm - 8pm)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Promo Code */}
+              <div className="pt-4 border-t">
+                <h3 className="font-semibold mb-4">Promo Code</h3>
+                {appliedPromo ? (
+                  <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div>
+                      <span className="font-medium text-green-800">{appliedPromo.code}</span>
+                      <span className="text-green-600 ml-2">
+                        {appliedPromo.discount_type === 'percent' 
+                          ? `${appliedPromo.discount_value}% off`
+                          : `$${(appliedPromo.discount_value / 100).toFixed(2)} off`
+                        }
+                      </span>
+                    </div>
+                    <button 
+                      onClick={removePromoCode}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={promoCodeInput}
+                      onChange={e => setPromoCodeInput(e.target.value.toUpperCase())}
+                      className="flex-1 p-3 border rounded-lg"
+                      placeholder="Enter code"
+                    />
+                    <button 
+                      onClick={applyPromoCode}
+                      disabled={promoLoading || !promoCodeInput.trim()}
+                      className="px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+                    >
+                      {promoLoading ? '...' : 'Apply'}
+                    </button>
+                  </div>
+                )}
+                {promoError && (
+                  <p className="text-red-500 text-sm mt-2">{promoError}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+              <div className="flex justify-between mb-2">
+                <span>Subtotal</span>
+                <span>${(subtotal / 100).toFixed(2)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between mb-2 text-green-600">
+                  <span>Discount</span>
+                  <span>-${(discount / 100).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between mb-2">
+                <span>Tax ({(taxRate * 100).toFixed(1)}%)</span>
+                <span>${(tax / 100).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-lg pt-2 border-t">
+                <span>Total</span>
+                <span>${(total / 100).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-8">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 py-4 border rounded-lg font-medium"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleCheckout}
+                disabled={!isStep3Valid}
+                className="flex-1 bg-black text-white py-4 rounded-lg font-medium disabled:bg-gray-300"
+              >
+                Continue to Payment
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Payment */}
+        {step === 4 && clientSecret && (
+          <div>
+            <h2 className="text-2xl font-bold mb-6">Payment</h2>
+            
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="flex justify-between font-semibold text-lg">
+                <span>Total</span>
+                <span>${(total / 100).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <Elements stripe={stripePromise} options={{ clientSecret }}>
+              <CheckoutForm orderId={orderId} />
+            </Elements>
+
+            <button
+              onClick={() => setStep(3)}
+              className="w-full mt-4 py-4 border rounded-lg font-medium"
+            >
+              Back
+            </button>
+          </div>
+        )}
+      </div>
+    </main>
+  )
+}
