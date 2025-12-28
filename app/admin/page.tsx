@@ -222,26 +222,32 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b p-6">
   <div className="max-w-6xl mx-auto flex justify-between items-center">
-    <a href="/">
-      <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
-    </a>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500">{user?.email}</span>
-            <button 
-              onClick={loadOrders}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            >
-              Refresh
-            </button>
-            <button 
-              onClick={handleLogout}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="flex items-center gap-6">
+      <a href="/">
+        <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
+      </a>
+      <nav className="flex gap-4">
+        <span className="font-medium text-black">Orders</span>
+        <a href="/admin/inventory" className="text-gray-500 hover:text-black">Inventory</a>
+      </nav>
+    </div>
+    <div className="flex items-center gap-4">
+      <span className="text-sm text-gray-500">{user?.email}</span>
+      <button 
+        onClick={loadOrders}
+        className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+      >
+        Refresh
+      </button>
+      <button 
+        onClick={handleLogout}
+        className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+      >
+        Logout
+      </button>
+    </div>
+  </div>
+</header>
 
       <div className="max-w-6xl mx-auto p-6">
         {/* Filter tabs */}

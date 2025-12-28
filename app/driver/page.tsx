@@ -415,17 +415,38 @@ export default function DriverPage() {
   }
 
   async function markPickedUp(orderId: string) {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: 'returned' })
-      .eq('id', orderId)
+  // Get order details to check if cross-city return
+  const order = orders.find(o => o.id === orderId)
+  
+  const { error } = await supabase
+    .from('orders')
+    .update({ status: 'returned' })
+    .eq('id', orderId)
 
-    if (!error) {
-      setOrders(prev => prev.map(o => 
-        o.id === orderId ? { ...o, status: 'returned' } : o
-      ))
+  if (!error) {
+    // Handle cross-city return - move inventory to return city
+    if (order && order.delivery_city?.id !== order.return_city?.id) {
+      // Get reservations for this order
+      const { data: reservations } = await supabase
+        .from('reservations')
+        .select('inventory_item_id')
+        .eq('order_id', orderId)
+      
+      if (reservations && reservations.length > 0) {
+        // Update inventory items to new city
+        const itemIds = reservations.map(r => r.inventory_item_id)
+        await supabase
+          .from('inventory_items')
+          .update({ city_id: order.return_city?.id })
+          .in('id', itemIds)
+      }
     }
+    
+    setOrders(prev => prev.map(o => 
+      o.id === orderId ? { ...o, status: 'returned' } : o
+    ))
   }
+}
 
   async function handleLogout() {
     await supabase.auth.signOut()
