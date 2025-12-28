@@ -130,9 +130,11 @@ export async function POST(request: NextRequest) {
             </div>
 
             <div class="section">
-              <div class="section-title">Questions?</div>
-              <p>Just reply to this email and we'll help you out!</p>
-            </div>
+  <div class="section-title">Track Your Order</div>
+  <p>You can check your order status anytime at:<br/>
+  <a href="https://ooloo.vercel.app/order" style="color: #0891b2;">ooloo.vercel.app/order</a></p>
+  <p style="margin-top: 10px;">Questions? Just reply to this email!</p>
+</div>
 
             <div class="footer">
               <p>© 2025 ooloo. All rights reserved.</p>
