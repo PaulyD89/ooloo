@@ -35,6 +35,14 @@ type Order = {
   order_items?: OrderItem[]
 }
 
+type InventoryAlert = {
+  date: string
+  city_name: string
+  product_name: string
+  available: number
+  total: number
+}
+
 const STATUS_OPTIONS = [
   'pending',
   'confirmed',
@@ -55,6 +63,8 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800'
 }
 
+const LOW_INVENTORY_THRESHOLD = 3
+
 export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -65,6 +75,8 @@ export default function AdminPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
+  const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([])
+  const [alertsLoading, setAlertsLoading] = useState(true)
   
   const router = useRouter()
   const supabase = createClient()
@@ -88,7 +100,6 @@ export default function AdminPage() {
     
     setUser(user)
     
-    // Check if user is an admin
     const { data: roleData, error } = await supabase
       .from('user_roles')
       .select('role')
@@ -97,7 +108,6 @@ export default function AdminPage() {
       .single()
 
     if (error || !roleData) {
-      // Not an admin - check if they're a driver
       const { data: driverData } = await supabase
         .from('drivers')
         .select('id')
@@ -106,10 +116,8 @@ export default function AdminPage() {
         .single()
 
       if (driverData) {
-        // They're a driver - redirect to driver page
         router.push('/driver')
       } else {
-        // Neither admin nor driver
         setAccessDenied(true)
         setAuthLoading(false)
       }
@@ -118,6 +126,7 @@ export default function AdminPage() {
 
     setAuthLoading(false)
     loadOrders()
+    loadInventoryAlerts()
   }
 
   async function handleLogout() {
@@ -139,6 +148,64 @@ export default function AdminPage() {
     if (data) setOrders(data)
     if (error) console.error('Error loading orders:', error)
     setLoading(false)
+  }
+
+  async function loadInventoryAlerts() {
+    setAlertsLoading(true)
+    
+    // Get cities and products
+    const [citiesRes, productsRes, inventoryRes] = await Promise.all([
+      supabase.from('cities').select('id, name').eq('is_active', true),
+      supabase.from('products').select('id, name, slug').eq('is_active', true),
+      supabase.from('inventory_items').select('id, city_id, product_id, status')
+    ])
+
+    const cities = citiesRes.data || []
+    const products = (productsRes.data || []).filter(p => p.slug !== 'set')
+    const inventory = inventoryRes.data || []
+
+    // Check next 14 days
+    const alerts: InventoryAlert[] = []
+    const today = new Date()
+    
+    for (let i = 0; i < 14; i++) {
+      const checkDate = new Date(today)
+      checkDate.setDate(today.getDate() + i)
+      const dateStr = checkDate.toISOString().split('T')[0]
+      
+      // Get reservations that overlap with this date
+      const { data: reservations } = await supabase
+        .from('reservations')
+        .select('inventory_item_id')
+        .lte('start_date', dateStr)
+        .gte('end_date', dateStr)
+      
+      const reservedItemIds = new Set(reservations?.map(r => r.inventory_item_id) || [])
+      
+      // Check each city/product combination
+      for (const city of cities) {
+        for (const product of products) {
+          const totalItems = inventory.filter(
+            i => i.city_id === city.id && i.product_id === product.id && i.status === 'available'
+          )
+          const reservedCount = totalItems.filter(i => reservedItemIds.has(i.id)).length
+          const available = totalItems.length - reservedCount
+          
+          if (available <= LOW_INVENTORY_THRESHOLD) {
+            alerts.push({
+              date: dateStr,
+              city_name: city.name,
+              product_name: product.name,
+              available,
+              total: totalItems.length
+            })
+          }
+        }
+      }
+    }
+    
+    setInventoryAlerts(alerts)
+    setAlertsLoading(false)
   }
 
   async function loadOrderItems(orderId: string) {
@@ -184,6 +251,23 @@ export default function AdminPage() {
     })
   }
 
+  const formatAlertDate = (dateStr: string) => {
+    const date = new Date(dateStr + 'T00:00:00')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    
+    if (date.getTime() === today.getTime()) return 'Today'
+    if (date.getTime() === tomorrow.getTime()) return 'Tomorrow'
+    
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
   const formatWindow = (window: string) => {
     const windows: Record<string, string> = {
       morning: '9am - 12pm',
@@ -192,6 +276,13 @@ export default function AdminPage() {
     }
     return windows[window] || window
   }
+
+  // Group alerts by date
+  const alertsByDate = inventoryAlerts.reduce((acc, alert) => {
+    if (!acc[alert.date]) acc[alert.date] = []
+    acc[alert.date].push(alert)
+    return acc
+  }, {} as Record<string, InventoryAlert[]>)
 
   if (authLoading) {
     return (
@@ -221,35 +312,68 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b p-6">
-  <div className="max-w-6xl mx-auto flex justify-between items-center">
-    <div className="flex items-center gap-6">
-      <a href="/">
-        <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
-      </a>
-      <nav className="flex gap-4">
-        <span className="font-medium text-black">Orders</span>
-        <a href="/admin/inventory" className="text-gray-500 hover:text-black">Inventory</a>
-      </nav>
-    </div>
-    <div className="flex items-center gap-4">
-      <span className="text-sm text-gray-500">{user?.email}</span>
-      <button 
-        onClick={loadOrders}
-        className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-      >
-        Refresh
-      </button>
-      <button 
-        onClick={handleLogout}
-        className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-      >
-        Logout
-      </button>
-    </div>
-  </div>
-</header>
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-6">
+            <a href="/">
+              <img src="/oolooicon.jpg" alt="ooloo" className="h-12" />
+            </a>
+            <nav className="flex gap-4">
+              <span className="font-medium text-black">Orders</span>
+              <a href="/admin/inventory" className="text-gray-500 hover:text-black">Inventory</a>
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-500">{user?.email}</span>
+            <button 
+              onClick={() => { loadOrders(); loadInventoryAlerts(); }}
+              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+            >
+              Refresh
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
 
       <div className="max-w-6xl mx-auto p-6">
+        {/* Inventory Alerts */}
+        {!alertsLoading && inventoryAlerts.length > 0 && (
+          <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <h3 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+              <span>⚠️</span> Low Inventory Alerts (Next 14 Days)
+            </h3>
+            <div className="space-y-3">
+              {Object.entries(alertsByDate).slice(0, 5).map(([date, alerts]) => (
+                <div key={date} className="bg-white rounded-lg p-3 border border-orange-100">
+                  <p className="font-medium text-sm text-orange-900 mb-2">{formatAlertDate(date)}</p>
+                  <div className="grid gap-2">
+                    {alerts.map((alert, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-sm">
+                        <span className="text-gray-700">
+                          {alert.product_name} - {alert.city_name}
+                        </span>
+                        <span className={`font-medium ${alert.available === 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                          {alert.available === 0 ? 'SOLD OUT' : `${alert.available} left`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {Object.keys(alertsByDate).length > 5 && (
+                <p className="text-sm text-orange-600">
+                  + {Object.keys(alertsByDate).length - 5} more dates with low inventory
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Filter tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           <button
