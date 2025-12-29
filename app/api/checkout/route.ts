@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
       deliveryWindow,
       returnWindow,
       cart,
+      addons: addonCart,
+      rentalSubtotal,
+      addonsSubtotal,
       subtotal,
       earlyBirdDiscount,
       promoDiscount,
@@ -51,9 +54,9 @@ export async function POST(request: NextRequest) {
     const isEarlyBird = daysUntilDelivery >= EARLY_BIRD_DAYS
     const isRushOrder = daysUntilDelivery <= 1
 
-    // Validate Early Bird discount
+    // Validate Early Bird discount (only applies to rental, not addons)
     const expectedEarlyBirdDiscount = isEarlyBird 
-      ? Math.round(subtotal * (EARLY_BIRD_DISCOUNT_PERCENT / 100)) 
+      ? Math.round(rentalSubtotal * (EARLY_BIRD_DISCOUNT_PERCENT / 100)) 
       : 0
     
     if (earlyBirdDiscount !== expectedEarlyBirdDiscount) {
@@ -79,7 +82,7 @@ export async function POST(request: NextRequest) {
     const carryonProductId = products?.find(p => p.slug === 'carryon')?.id
     const largeProductId = products?.find(p => p.slug === 'large')?.id
 
-    // Verify availability before proceeding
+    // Verify rental availability before proceeding
     for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {
       const slug = productMap.get(productId)
       let itemsToCheck: { productId: string; quantity: number }[] = []
@@ -119,6 +122,37 @@ export async function POST(request: NextRequest) {
         if ((count || 0) < item.quantity) {
           return NextResponse.json({ 
             error: 'Some items are no longer available. Please go back and adjust your order.' 
+          }, { status: 400 })
+        }
+      }
+    }
+
+    // Verify addon availability
+    if (addonCart && Object.keys(addonCart).length > 0) {
+      for (const [addonId, details] of Object.entries(addonCart) as [string, { quantity: number; price: number }][]) {
+        const { data: addon } = await supabase
+          .from('addons')
+          .select('quantity_available, price')
+          .eq('id', addonId)
+          .eq('is_active', true)
+          .single()
+
+        if (!addon) {
+          return NextResponse.json({ 
+            error: 'Add-on not found. Please refresh and try again.' 
+          }, { status: 400 })
+        }
+
+        if (addon.quantity_available < details.quantity) {
+          return NextResponse.json({ 
+            error: 'Some add-ons are no longer available in the requested quantity.' 
+          }, { status: 400 })
+        }
+
+        // Verify price hasn't changed
+        if (addon.price !== details.price) {
+          return NextResponse.json({ 
+            error: 'Add-on price has changed. Please refresh and try again.' 
           }, { status: 400 })
         }
       }
@@ -172,7 +206,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
     }
 
-    // Create order items
+    // Create order items (rentals)
     const orderItems = Object.entries(cart).map(([productId, details]: [string, any]) => ({
       order_id: order.id,
       product_id: productId,
@@ -190,7 +224,55 @@ export async function POST(request: NextRequest) {
       console.error('Order items error:', itemsError)
     }
 
-    // Reserve inventory
+    // Create order addons and decrement inventory
+    if (addonCart && Object.keys(addonCart).length > 0) {
+      const orderAddons = Object.entries(addonCart).map(([addonId, details]: [string, { quantity: number; price: number }]) => ({
+        order_id: order.id,
+        addon_id: addonId,
+        quantity: details.quantity,
+        unit_price: details.price
+      }))
+
+      const { error: addonsError } = await supabase
+        .from('order_addons')
+        .insert(orderAddons)
+
+      if (addonsError) {
+        console.error('Order addons error:', addonsError)
+      }
+
+      // Decrement addon inventory
+      for (const [addonId, details] of Object.entries(addonCart) as [string, { quantity: number }][]) {
+        const { error: updateError } = await supabase
+          .from('addons')
+          .update({ 
+            quantity_available: supabase.rpc('decrement_addon_quantity', { 
+              addon_id: addonId, 
+              qty: details.quantity 
+            })
+          })
+          .eq('id', addonId)
+
+        // Alternative: direct decrement if RPC doesn't exist
+        if (updateError) {
+          // Fallback: fetch current quantity and update
+          const { data: currentAddon } = await supabase
+            .from('addons')
+            .select('quantity_available')
+            .eq('id', addonId)
+            .single()
+
+          if (currentAddon) {
+            await supabase
+              .from('addons')
+              .update({ quantity_available: currentAddon.quantity_available - details.quantity })
+              .eq('id', addonId)
+          }
+        }
+      }
+    }
+
+    // Reserve inventory (rentals)
     const reservations: { inventory_item_id: string; order_id: string; start_date: string; end_date: string }[] = []
 
     for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {

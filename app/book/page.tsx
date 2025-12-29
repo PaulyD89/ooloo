@@ -85,6 +85,16 @@ type PromoCode = {
   min_order_total: number | null
 }
 
+type Addon = {
+  id: string
+  name: string
+  slug: string
+  description: string
+  price: number
+  image_url: string | null
+  quantity_available: number
+}
+
 // Pricing constants
 const EARLY_BIRD_DAYS = 60
 const EARLY_BIRD_DISCOUNT_PERCENT = 10
@@ -194,6 +204,7 @@ export default function BookPage() {
   const [step, setStep] = useState(1)
   const [cities, setCities] = useState<City[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [addons, setAddons] = useState<Addon[]>([])
   const [galleryProduct, setGalleryProduct] = useState<Product | null>(null)
   
   const [deliveryCitySelect, setDeliveryCitySelect] = useState('')
@@ -201,6 +212,7 @@ export default function BookPage() {
   const [deliveryDate, setDeliveryDate] = useState('')
   const [returnDate, setReturnDate] = useState('')
   const [cart, setCart] = useState<Record<string, number>>({})
+  const [addonCart, setAddonCart] = useState<Record<string, number>>({})
   
   const [customerName, setCustomerName] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
@@ -232,13 +244,15 @@ export default function BookPage() {
 
   useEffect(() => {
     async function loadData() {
-      const [citiesRes, productsRes] = await Promise.all([
+      const [citiesRes, productsRes, addonsRes] = await Promise.all([
         supabase.from('cities').select('*').eq('is_active', true),
-        supabase.from('products').select('*').eq('is_active', true).order('sort_order')
+        supabase.from('products').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('addons').select('*').eq('is_active', true)
       ])
       
       if (citiesRes.data) setCities(citiesRes.data)
       if (productsRes.data) setProducts(productsRes.data)
+      if (addonsRes.data) setAddons(addonsRes.data)
     }
     
     loadData()
@@ -306,19 +320,28 @@ export default function BookPage() {
   const selectedCity = cities.find(c => c.id === deliveryCitySelect)
   const taxRate = selectedCity?.tax_rate || 0.095
 
-  const subtotal = products.reduce((sum, product) => {
+  // Rental subtotal
+  const rentalSubtotal = products.reduce((sum, product) => {
     const qty = cart[product.id] || 0
     return sum + (qty * product.daily_rate * days)
   }, 0)
 
-  // Early Bird discount (10% off subtotal)
-  const earlyBirdDiscount = isEarlyBird ? Math.round(subtotal * (EARLY_BIRD_DISCOUNT_PERCENT / 100)) : 0
+  // Add-ons subtotal
+  const addonsSubtotal = addons.reduce((sum, addon) => {
+    const qty = addonCart[addon.id] || 0
+    return sum + (qty * addon.price)
+  }, 0)
 
-  // Promo code discount (applied after Early Bird)
-  const subtotalAfterEarlyBird = subtotal - earlyBirdDiscount
+  const subtotal = rentalSubtotal + addonsSubtotal
+
+  // Early Bird discount (10% off rental subtotal only, not add-ons)
+  const earlyBirdDiscount = isEarlyBird ? Math.round(rentalSubtotal * (EARLY_BIRD_DISCOUNT_PERCENT / 100)) : 0
+
+  // Promo code discount (applied after Early Bird, on rental subtotal only)
+  const rentalAfterEarlyBird = rentalSubtotal - earlyBirdDiscount
   const promoDiscount = appliedPromo
     ? appliedPromo.discount_type === 'percent'
-      ? Math.round(subtotalAfterEarlyBird * (appliedPromo.discount_value / 100))
+      ? Math.round(rentalAfterEarlyBird * (appliedPromo.discount_value / 100))
       : appliedPromo.discount_value
     : 0
 
@@ -329,7 +352,7 @@ export default function BookPage() {
   const rushFee = isRushOrder ? RUSH_FEE : 0
 
   const deliveryFee = 1999
-  const subtotalAfterDiscounts = subtotal - totalDiscount
+  const subtotalAfterDiscounts = rentalSubtotal - totalDiscount + addonsSubtotal
   const taxableAmount = subtotalAfterDiscounts + deliveryFee + rushFee
   const tax = Math.round(taxableAmount * taxRate)
   const total = subtotalAfterDiscounts + deliveryFee + rushFee + tax
@@ -357,6 +380,20 @@ export default function BookPage() {
       return {
         ...prev,
         [productId]: Math.max(0, Math.min(newQty, maxAvailable))
+      }
+    })
+  }
+
+  const updateAddonCart = (addonId: string, delta: number) => {
+    const addon = addons.find(a => a.id === addonId)
+    if (!addon) return
+
+    setAddonCart(prev => {
+      const currentQty = prev[addonId] || 0
+      const newQty = currentQty + delta
+      return {
+        ...prev,
+        [addonId]: Math.max(0, Math.min(newQty, addon.quantity_available))
       }
     })
   }
@@ -392,7 +429,7 @@ export default function BookPage() {
       return
     }
 
-    if (data.min_order_total && subtotal < data.min_order_total) {
+    if (data.min_order_total && rentalSubtotal < data.min_order_total) {
       setPromoError(`Minimum order of $${(data.min_order_total / 100).toFixed(2)} required`)
       setPromoLoading(false)
       return
@@ -428,6 +465,18 @@ export default function BookPage() {
       }
     })
 
+    // Build addons cart for API
+    const addonDetails: Record<string, { quantity: number; price: number }> = {}
+    addons.forEach(addon => {
+      const qty = addonCart[addon.id] || 0
+      if (qty > 0) {
+        addonDetails[addon.id] = {
+          quantity: qty,
+          price: addon.price
+        }
+      }
+    })
+
     const response = await fetch('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -444,6 +493,9 @@ export default function BookPage() {
         deliveryWindow,
         returnWindow,
         cart: cartDetails,
+        addons: addonDetails,
+        rentalSubtotal,
+        addonsSubtotal,
         subtotal,
         earlyBirdDiscount,
         promoDiscount,
@@ -662,11 +714,11 @@ export default function BookPage() {
               </div>
             )}
 
-            {subtotal > 0 && (
+            {rentalSubtotal > 0 && (
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                 <div className="flex justify-between font-semibold">
                   <span>Subtotal</span>
-                  <span>${(subtotal / 100).toFixed(2)}</span>
+                  <span>${(rentalSubtotal / 100).toFixed(2)}</span>
                 </div>
                 {isEarlyBird && (
                   <div className="flex justify-between text-green-600 text-sm mt-1">
@@ -686,7 +738,7 @@ export default function BookPage() {
               </button>
               <button
                 onClick={() => setStep(3)}
-                disabled={subtotal === 0}
+                disabled={rentalSubtotal === 0}
                 className="flex-1 bg-black text-white py-4 rounded-lg font-medium disabled:bg-gray-300"
               >
                 Continue
@@ -881,6 +933,64 @@ export default function BookPage() {
                 </div>
               </div>
 
+              {/* Travel Pack Upsell */}
+              {addons.length > 0 && (
+                <div className="pt-4 border-t">
+                  <h3 className="font-semibold mb-4">Add to your trip</h3>
+                  <div className="space-y-3">
+                    {addons.map(addon => {
+                      const inCart = addonCart[addon.id] || 0
+                      const soldOut = addon.quantity_available === 0 && inCart === 0
+                      const cantAddMore = inCart >= addon.quantity_available
+
+                      return (
+                        <div 
+                          key={addon.id} 
+                          className={`flex items-center gap-4 p-4 border rounded-lg bg-blue-50 border-blue-200 ${soldOut ? 'opacity-50' : ''}`}
+                        >
+                          {addon.image_url && (
+                            <div className="w-20 h-20 bg-white rounded-lg overflow-hidden flex-shrink-0">
+                              <img
+                                src={addon.image_url}
+                                alt={addon.name}
+                                className="w-full h-full object-contain p-1"
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold">{addon.name}</h4>
+                            <p className="text-sm text-gray-600 line-clamp-2">{addon.description}</p>
+                            <p className="text-sm font-medium mt-1">${(addon.price / 100).toFixed(2)}</p>
+                            {soldOut && (
+                              <p className="text-xs text-red-600 mt-1">Out of stock</p>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => updateAddonCart(addon.id, -1)}
+                              disabled={inCart === 0}
+                              className="w-8 h-8 rounded-full border border-blue-300 bg-white flex items-center justify-center disabled:opacity-30"
+                            >
+                              -
+                            </button>
+                            <span className="w-6 text-center">{inCart}</span>
+                            <button 
+                              onClick={() => updateAddonCart(addon.id, 1)}
+                              disabled={soldOut || cantAddMore}
+                              className="w-8 h-8 rounded-full border border-blue-300 bg-white flex items-center justify-center disabled:opacity-30"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="pt-4 border-t">
                 <h3 className="font-semibold mb-4">Promo Code</h3>
                 {appliedPromo ? (
@@ -927,9 +1037,15 @@ export default function BookPage() {
 
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
               <div className="flex justify-between mb-2">
-                <span>Subtotal</span>
-                <span>${(subtotal / 100).toFixed(2)}</span>
+                <span>Rental Subtotal</span>
+                <span>${(rentalSubtotal / 100).toFixed(2)}</span>
               </div>
+              {addonsSubtotal > 0 && (
+                <div className="flex justify-between mb-2">
+                  <span>Add-ons</span>
+                  <span>${(addonsSubtotal / 100).toFixed(2)}</span>
+                </div>
+              )}
               {earlyBirdDiscount > 0 && (
                 <div className="flex justify-between mb-2 text-green-600">
                   <span>Early Bird Discount (10%)</span>
