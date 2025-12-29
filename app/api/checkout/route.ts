@@ -9,6 +9,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// Pricing constants - keep in sync with frontend
+const EARLY_BIRD_DAYS = 60
+const EARLY_BIRD_DISCOUNT_PERCENT = 10
+const RUSH_FEE = 999 // $9.99 in cents
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -26,12 +31,44 @@ export async function POST(request: NextRequest) {
       returnWindow,
       cart,
       subtotal,
-      discount,
+      earlyBirdDiscount,
+      promoDiscount,
+      rushFee,
       deliveryFee,
       tax,
       total,
       promoCodeId
     } = body
+
+    // Server-side validation of Early Bird and Rush Fee
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const delivery = new Date(deliveryDate)
+    delivery.setHours(0, 0, 0, 0)
+    const diffTime = delivery.getTime() - today.getTime()
+    const daysUntilDelivery = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+    const isEarlyBird = daysUntilDelivery >= EARLY_BIRD_DAYS
+    const isRushOrder = daysUntilDelivery === 1
+
+    // Validate Early Bird discount
+    const expectedEarlyBirdDiscount = isEarlyBird 
+      ? Math.round(subtotal * (EARLY_BIRD_DISCOUNT_PERCENT / 100)) 
+      : 0
+    
+    if (earlyBirdDiscount !== expectedEarlyBirdDiscount) {
+      return NextResponse.json({ 
+        error: 'Invalid Early Bird discount. Please refresh and try again.' 
+      }, { status: 400 })
+    }
+
+    // Validate Rush Fee
+    const expectedRushFee = isRushOrder ? RUSH_FEE : 0
+    if (rushFee !== expectedRushFee) {
+      return NextResponse.json({ 
+        error: 'Invalid Rush Fee. Please refresh and try again.' 
+      }, { status: 400 })
+    }
 
     // Get product info for set handling
     const { data: products } = await supabase
@@ -97,6 +134,9 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Calculate total discount for storage (Early Bird + Promo)
+    const totalDiscount = (earlyBirdDiscount || 0) + (promoDiscount || 0)
+
     // Create the order in database
     const { data: order, error: orderError } = await supabase
       .from('orders')
@@ -113,7 +153,10 @@ export async function POST(request: NextRequest) {
         delivery_window: deliveryWindow,
         return_window: returnWindow,
         subtotal,
-        discount: discount || 0,
+        discount: totalDiscount,
+        early_bird_discount: earlyBirdDiscount || 0,
+        promo_discount: promoDiscount || 0,
+        rush_fee: rushFee || 0,
         delivery_fee: deliveryFee || 1999,
         promo_code_id: promoCodeId || null,
         tax,

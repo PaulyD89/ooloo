@@ -85,6 +85,11 @@ type PromoCode = {
   min_order_total: number | null
 }
 
+// Pricing constants
+const EARLY_BIRD_DAYS = 60
+const EARLY_BIRD_DISCOUNT_PERCENT = 10
+const RUSH_FEE = 999 // $9.99 in cents
+
 function CheckoutForm({ orderId }: { orderId: string }) {
   const stripe = useStripe()
   const elements = useElements()
@@ -282,6 +287,22 @@ export default function BookPage() {
     ? Math.max(1, Math.ceil((new Date(returnDate).getTime() - new Date(deliveryDate).getTime()) / (1000 * 60 * 60 * 24)))
     : 0
 
+  // Calculate days until delivery for Early Bird / Rush Fee
+  const getDaysUntilDelivery = () => {
+    if (!deliveryDate) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const delivery = new Date(deliveryDate)
+    delivery.setHours(0, 0, 0, 0)
+    const diffTime = delivery.getTime() - today.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  const daysUntilDelivery = getDaysUntilDelivery()
+  const isEarlyBird = daysUntilDelivery !== null && daysUntilDelivery >= EARLY_BIRD_DAYS
+  const isRushOrder = daysUntilDelivery !== null && daysUntilDelivery === 1
+
   const selectedCity = cities.find(c => c.id === deliveryCitySelect)
   const taxRate = selectedCity?.tax_rate || 0.095
 
@@ -290,17 +311,28 @@ export default function BookPage() {
     return sum + (qty * product.daily_rate * days)
   }, 0)
 
-  const discount = appliedPromo
+  // Early Bird discount (10% off subtotal)
+  const earlyBirdDiscount = isEarlyBird ? Math.round(subtotal * (EARLY_BIRD_DISCOUNT_PERCENT / 100)) : 0
+
+  // Promo code discount (applied after Early Bird)
+  const subtotalAfterEarlyBird = subtotal - earlyBirdDiscount
+  const promoDiscount = appliedPromo
     ? appliedPromo.discount_type === 'percent'
-      ? Math.round(subtotal * (appliedPromo.discount_value / 100))
+      ? Math.round(subtotalAfterEarlyBird * (appliedPromo.discount_value / 100))
       : appliedPromo.discount_value
     : 0
 
+  // Total discount for display
+  const totalDiscount = earlyBirdDiscount + promoDiscount
+
+  // Rush fee
+  const rushFee = isRushOrder ? RUSH_FEE : 0
+
   const deliveryFee = 1999
-  const subtotalAfterDiscount = subtotal - discount
-  const taxableAmount = subtotalAfterDiscount + deliveryFee
+  const subtotalAfterDiscounts = subtotal - totalDiscount
+  const taxableAmount = subtotalAfterDiscounts + deliveryFee + rushFee
   const tax = Math.round(taxableAmount * taxRate)
-  const total = subtotalAfterDiscount + deliveryFee + tax
+  const total = subtotalAfterDiscounts + deliveryFee + rushFee + tax
 
   const updateCart = (productId: string, delta: number) => {
     const product = products.find(p => p.id === productId)
@@ -413,7 +445,9 @@ export default function BookPage() {
         returnWindow,
         cart: cartDetails,
         subtotal,
-        discount,
+        earlyBirdDiscount,
+        promoDiscount,
+        rushFee,
         deliveryFee,
         tax,
         total,
@@ -488,25 +522,43 @@ export default function BookPage() {
               </div>
 
               <div>
-  <label className="block text-sm font-medium mb-2">Delivery Date</label>
-  <input 
-    type="date"
-    value={deliveryDate}
-    onChange={e => setDeliveryDate(e.target.value)}
-    className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
-  />
-</div>
+                <label className="block text-sm font-medium mb-2">Delivery Date</label>
+                <input 
+                  type="date"
+                  value={deliveryDate}
+                  onChange={e => setDeliveryDate(e.target.value)}
+                  className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
+                />
+              </div>
 
-<div>
-  <label className="block text-sm font-medium mb-2">Return Date</label>
-  <input 
-    type="date"
-    value={returnDate}
-    onChange={e => setReturnDate(e.target.value)}
-    className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
-  />
-</div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Return Date</label>
+                <input 
+                  type="date"
+                  value={returnDate}
+                  onChange={e => setReturnDate(e.target.value)}
+                  className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
+                />
+              </div>
             </div>
+
+            {/* Early Bird / Rush Fee indicator on step 1 */}
+            {deliveryDate && (
+              <div className="mt-4">
+                {isEarlyBird && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <span className="text-green-800 font-medium">🎉 Early Bird Discount!</span>
+                    <span className="text-green-600 ml-2">Book 60+ days ahead and save 10%</span>
+                  </div>
+                )}
+                {isRushOrder && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <span className="text-amber-800 font-medium">⚡ Rush Order</span>
+                    <span className="text-amber-600 ml-2">A $9.99 rush fee applies for next-day delivery</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={() => setStep(2)}
@@ -522,6 +574,18 @@ export default function BookPage() {
           <div>
             <h2 className="text-2xl font-bold mb-2">Choose your luggage</h2>
             <p className="text-gray-600 mb-6">{days} day rental</p>
+
+            {/* Early Bird / Rush indicator on step 2 */}
+            {isEarlyBird && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <span className="text-green-800 font-medium">🎉 Early Bird: 10% off your order!</span>
+              </div>
+            )}
+            {isRushOrder && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <span className="text-amber-800 font-medium">⚡ Rush Fee: +$9.99</span>
+              </div>
+            )}
 
             {availabilityLoading ? (
               <div className="text-center py-8">Checking availability...</div>
@@ -604,6 +668,12 @@ export default function BookPage() {
                   <span>Subtotal</span>
                   <span>${(subtotal / 100).toFixed(2)}</span>
                 </div>
+                {isEarlyBird && (
+                  <div className="flex justify-between text-green-600 text-sm mt-1">
+                    <span>Early Bird Discount (10%)</span>
+                    <span>-${(earlyBirdDiscount / 100).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -627,35 +697,41 @@ export default function BookPage() {
 
         {step === 3 && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">Delivery details</h2>
+            <h2 className="text-2xl font-bold mb-6">Your details</h2>
             
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Full Name</label>
-                <input 
-                  type="text" 
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full p-3 border rounded-lg" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <input 
-                  type="email" 
-                  value={customerEmail}
-                  onChange={e => setCustomerEmail(e.target.value)}
-                  className="w-full p-3 border rounded-lg" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Phone</label>
-                <input 
-                  type="tel" 
-                  value={customerPhone}
-                  onChange={e => setCustomerPhone(e.target.value)}
-                  className="w-full p-3 border rounded-lg" 
-                />
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="font-semibold">Contact Information</h3>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="w-full p-3 border rounded-lg" 
+                    placeholder="John Smith" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Email</label>
+                  <input 
+                    type="email" 
+                    value={customerEmail}
+                    onChange={e => setCustomerEmail(e.target.value)}
+                    className="w-full p-3 border rounded-lg" 
+                    placeholder="john@example.com" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Phone</label>
+                  <input 
+                    type="tel" 
+                    value={customerPhone}
+                    onChange={e => setCustomerPhone(e.target.value)}
+                    className="w-full p-3 border rounded-lg" 
+                    placeholder="(555) 123-4567" 
+                  />
+                </div>
               </div>
 
               <div className="pt-4 border-t">
@@ -854,16 +930,28 @@ export default function BookPage() {
                 <span>Subtotal</span>
                 <span>${(subtotal / 100).toFixed(2)}</span>
               </div>
-              {discount > 0 && (
+              {earlyBirdDiscount > 0 && (
                 <div className="flex justify-between mb-2 text-green-600">
-                  <span>Discount</span>
-                  <span>-${(discount / 100).toFixed(2)}</span>
+                  <span>Early Bird Discount (10%)</span>
+                  <span>-${(earlyBirdDiscount / 100).toFixed(2)}</span>
+                </div>
+              )}
+              {promoDiscount > 0 && (
+                <div className="flex justify-between mb-2 text-green-600">
+                  <span>Promo Code ({appliedPromo?.code})</span>
+                  <span>-${(promoDiscount / 100).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between mb-2">
                 <span>Delivery & Pickup Fee</span>
                 <span>${(deliveryFee / 100).toFixed(2)}</span>
               </div>
+              {rushFee > 0 && (
+                <div className="flex justify-between mb-2 text-amber-600">
+                  <span>Rush Fee</span>
+                  <span>${(rushFee / 100).toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between mb-2">
                 <span>Tax ({(taxRate * 100).toFixed(1)}%)</span>
                 <span>${(tax / 100).toFixed(2)}</span>
