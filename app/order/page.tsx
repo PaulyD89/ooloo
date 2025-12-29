@@ -110,19 +110,19 @@ export default function OrderLookupPage() {
     setError('')
     setSearched(true)
 
-    // Clean up the order ID - handle partial IDs
-    const cleanOrderId = orderId.trim().toLowerCase()
+    // Clean up the order ID - handle partial IDs (remove dashes, lowercase)
+const cleanOrderId = orderId.trim().toLowerCase().replace(/-/g, '')
 
-    const { data, error: fetchError } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        delivery_city:cities!delivery_city_id(name),
-        return_city:cities!return_city_id(name)
-      `)
-      .eq('customer_email', email.toLowerCase().trim())
-      .ilike('id', `${cleanOrderId}%`)
-      .single()
+const { data, error: fetchError } = await supabase
+  .from('orders')
+  .select(`
+    *,
+    delivery_city:cities!delivery_city_id(name),
+    return_city:cities!return_city_id(name)
+  `)
+  .eq('customer_email', email.toLowerCase().trim())
+  .ilike('id', `%${cleanOrderId}%`)
+  .single()
 
     if (fetchError || !data) {
       setError('Order not found. Please check your email and order ID.')
