@@ -206,6 +206,7 @@ export default function BookPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [addons, setAddons] = useState<Addon[]>([])
   const [galleryProduct, setGalleryProduct] = useState<Product | null>(null)
+  const [galleryAddon, setGalleryAddon] = useState<Addon | null>(null)
   
   const [deliveryCitySelect, setDeliveryCitySelect] = useState('')
   const [returnCitySelect, setReturnCitySelect] = useState('')
@@ -946,28 +947,31 @@ export default function BookPage() {
                       return (
                         <div 
                           key={addon.id} 
-                          className={`flex items-center gap-4 p-4 border rounded-lg bg-blue-50 border-blue-200 ${soldOut ? 'opacity-50' : ''}`}
+                          className={`flex items-start gap-4 p-4 border rounded-lg bg-blue-50 border-blue-200 ${soldOut ? 'opacity-50' : ''}`}
                         >
                           {addon.image_url && (
-                            <div className="w-20 h-20 bg-white rounded-lg overflow-hidden flex-shrink-0">
+                            <button
+                              onClick={() => setGalleryAddon(addon)}
+                              className="w-20 h-20 bg-white rounded-lg overflow-hidden flex-shrink-0 hover:opacity-80 transition cursor-pointer"
+                            >
                               <img
                                 src={addon.image_url}
                                 alt={addon.name}
                                 className="w-full h-full object-contain p-1"
                               />
-                            </div>
+                            </button>
                           )}
                           
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold">{addon.name}</h4>
-                            <p className="text-sm text-gray-600 line-clamp-2">{addon.description}</p>
+                            <p className="text-sm text-gray-600">{addon.description}</p>
                             <p className="text-sm font-medium mt-1">${(addon.price / 100).toFixed(2)}</p>
                             {soldOut && (
                               <p className="text-xs text-red-600 mt-1">Out of stock</p>
                             )}
                           </div>
                           
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 pt-1">
                             <button 
                               onClick={() => updateAddonCart(addon.id, -1)}
                               disabled={inCart === 0}
@@ -1126,6 +1130,32 @@ export default function BookPage() {
           product={galleryProduct} 
           onClose={() => setGalleryProduct(null)} 
         />
+      )}
+
+      {galleryAddon && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto">
+            <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
+              <h3 className="font-semibold text-lg">{galleryAddon.name}</h3>
+              <button onClick={() => setGalleryAddon(null)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+            </div>
+            
+            <div className="p-4">
+              {galleryAddon.image_url && (
+                <div className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
+                  <img
+                    src={galleryAddon.image_url}
+                    alt={galleryAddon.name}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+              
+              <p className="text-gray-600">{galleryAddon.description}</p>
+              <p className="font-semibold mt-3">${(galleryAddon.price / 100).toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   )
