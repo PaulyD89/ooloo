@@ -88,15 +88,19 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="px-6 py-12 bg-gray-900 text-gray-400">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-3">
-            <img src="/oolooicon.png" alt="ooloo" className="h-10 rounded" />
-            <span className="text-white font-medium">ooloo</span>
-          </div>
-          <p className="text-sm">© 2025 ooloo. All rights reserved.</p>
-        </div>
-      </footer>
+<footer className="px-6 py-12 bg-gray-900 text-gray-400">
+  <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+    <div className="flex items-center gap-3">
+      <img src="/oolooicon.jpg" alt="ooloo" className="h-10 rounded" />
+      <span className="text-white font-medium">ooloo</span>
+    </div>
+    <div className="flex gap-6 text-sm">
+      <a href="/order" className="hover:text-white transition">Track Order</a>
+      <a href="/book" className="hover:text-white transition">Book Now</a>
+    </div>
+    <p className="text-sm">© 2025 ooloo. All rights reserved.</p>
+  </div>
+</footer>
     </main>
   )
 }

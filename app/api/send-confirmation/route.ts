@@ -131,9 +131,16 @@ export async function POST(request: NextRequest) {
 
             <div class="section">
   <div class="section-title">Track Your Order</div>
-  <p>You can check your order status anytime at:<br/>
-  <a href="https://ooloo.vercel.app/order" style="color: #0891b2;">ooloo.vercel.app/order</a></p>
-  <p style="margin-top: 10px;">Questions? Just reply to this email!</p>
+  <p>Check your order status anytime:</p>
+  <p style="margin: 10px 0;">
+    <a href="https://ooloo.vercel.app/order" style="display: inline-block; background: #0891b2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">Track My Order</a>
+  </p>
+  <p style="color: #666; font-size: 14px;">Your Order ID: <strong>${orderId.slice(0, 8).toUpperCase()}</strong></p>
+</div>
+
+<div class="section">
+  <div class="section-title">Questions?</div>
+  <p>Just reply to this email and we'll help you out!</p>
 </div>
 
             <div class="footer">
