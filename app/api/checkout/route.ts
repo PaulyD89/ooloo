@@ -14,6 +14,9 @@ const EARLY_BIRD_DAYS = 60
 const EARLY_BIRD_DISCOUNT_PERCENT = 10
 const RUSH_FEE = 999 // $9.99 in cents
 
+type AddonCartItem = { quantity: number; price: number }
+type CartItem = { quantity: number; dailyRate?: number; days?: number }
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -83,7 +86,8 @@ export async function POST(request: NextRequest) {
     const largeProductId = products?.find(p => p.slug === 'large')?.id
 
     // Verify rental availability before proceeding
-    for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {
+    const cartEntries = Object.entries(cart) as [string, CartItem][]
+    for (const [productId, details] of cartEntries) {
       const slug = productMap.get(productId)
       let itemsToCheck: { productId: string; quantity: number }[] = []
 
@@ -128,8 +132,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify addon availability
-    if (addonCart && Object.keys(addonCart).length > 0) {
-      for (const [addonId, details] of Object.entries(addonCart) as [string, { quantity: number; price: number }][]) {
+    const addonCartRecord = addonCart as Record<string, AddonCartItem> | undefined
+    if (addonCartRecord && Object.keys(addonCartRecord).length > 0) {
+      for (const addonId of Object.keys(addonCartRecord)) {
+        const details = addonCartRecord[addonId]
         const { data: addon } = await supabase
           .from('addons')
           .select('quantity_available, price')
@@ -207,13 +213,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Create order items (rentals)
-    const orderItems = Object.entries(cart).map(([productId, details]: [string, any]) => ({
+    const orderItems = cartEntries.map(([productId, details]) => ({
       order_id: order.id,
       product_id: productId,
       quantity: details.quantity,
       daily_rate: details.dailyRate,
       days: details.days,
-      line_total: details.quantity * details.dailyRate * details.days
+      line_total: details.quantity * (details.dailyRate || 0) * (details.days || 0)
     }))
 
     const { error: itemsError } = await supabase
@@ -225,16 +231,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Create order addons and decrement inventory
-    if (addonCart && Object.keys(addonCart).length > 0) {
-      const orderAddons = Object.entries(addonCart).map(([addonId, details]) => {
-  const { quantity, price } = details as { quantity: number; price: number }
-  return {
-    order_id: order.id,
-    addon_id: addonId,
-    quantity,
-    unit_price: price
-  }
-})
+    if (addonCartRecord && Object.keys(addonCartRecord).length > 0) {
+      const orderAddons = Object.keys(addonCartRecord).map(addonId => {
+        const details = addonCartRecord[addonId]
+        return {
+          order_id: order.id,
+          addon_id: addonId,
+          quantity: details.quantity,
+          unit_price: details.price
+        }
+      })
 
       const { error: addonsError } = await supabase
         .from('order_addons')
@@ -245,32 +251,20 @@ export async function POST(request: NextRequest) {
       }
 
       // Decrement addon inventory
-      for (const [addonId, details] of Object.entries(addonCart) as [string, { quantity: number }][]) {
-        const { error: updateError } = await supabase
+      for (const addonId of Object.keys(addonCartRecord)) {
+        const details = addonCartRecord[addonId]
+        // Fetch current quantity and update
+        const { data: currentAddon } = await supabase
           .from('addons')
-          .update({ 
-            quantity_available: supabase.rpc('decrement_addon_quantity', { 
-              addon_id: addonId, 
-              qty: details.quantity 
-            })
-          })
+          .select('quantity_available')
           .eq('id', addonId)
+          .single()
 
-        // Alternative: direct decrement if RPC doesn't exist
-        if (updateError) {
-          // Fallback: fetch current quantity and update
-          const { data: currentAddon } = await supabase
+        if (currentAddon) {
+          await supabase
             .from('addons')
-            .select('quantity_available')
+            .update({ quantity_available: currentAddon.quantity_available - details.quantity })
             .eq('id', addonId)
-            .single()
-
-          if (currentAddon) {
-            await supabase
-              .from('addons')
-              .update({ quantity_available: currentAddon.quantity_available - details.quantity })
-              .eq('id', addonId)
-          }
         }
       }
     }
@@ -278,7 +272,7 @@ export async function POST(request: NextRequest) {
     // Reserve inventory (rentals)
     const reservations: { inventory_item_id: string; order_id: string; start_date: string; end_date: string }[] = []
 
-    for (const [productId, details] of Object.entries(cart) as [string, { quantity: number }][]) {
+    for (const [productId, details] of cartEntries) {
       const slug = productMap.get(productId)
       let itemsToReserve: { productId: string; quantity: number }[] = []
 
