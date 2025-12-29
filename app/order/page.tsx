@@ -101,52 +101,65 @@ export default function OrderLookupPage() {
   }
 
   async function lookupOrder() {
-    if (!email || !orderId) {
-      setError('Please enter both email and order ID')
-      return
-    }
-
-    setLoading(true)
-    setError('')
-    setSearched(true)
-
-    // Clean up the order ID - handle partial IDs (remove dashes, lowercase)
-const cleanOrderId = orderId.trim().toLowerCase().replace(/-/g, '')
-
-const { data, error: fetchError } = await supabase
-  .from('orders')
-  .select(`
-    *,
-    delivery_city:cities!delivery_city_id(name),
-    return_city:cities!return_city_id(name)
-  `)
-  .eq('customer_email', email.toLowerCase().trim())
-  .ilike('id', `%${cleanOrderId}%`)
-  .single()
-
-    if (fetchError || !data) {
-      setError('Order not found. Please check your email and order ID.')
-      setOrder(null)
-      setOrderItems([])
-      setLoading(false)
-      return
-    }
-
-    setOrder(data)
-
-    // Get order items
-    const { data: items } = await supabase
-      .from('order_items')
-      .select(`
-        *,
-        product:products!product_id(name)
-      `)
-      .eq('order_id', data.id)
-
-    if (items) setOrderItems(items)
-
-    setLoading(false)
+  if (!email || !orderId) {
+    setError('Please enter both email and order ID')
+    return
   }
+
+  setLoading(true)
+  setError('')
+  setSearched(true)
+
+  // Clean up inputs
+  const cleanEmail = email.trim().toLowerCase()
+  const cleanOrderId = orderId.trim().toLowerCase().replace(/-/g, '')
+
+  // First get all orders for this email
+  const { data: orders, error: fetchError } = await supabase
+    .from('orders')
+    .select(`
+      *,
+      delivery_city:cities!delivery_city_id(name),
+      return_city:cities!return_city_id(name)
+    `)
+    .eq('customer_email', cleanEmail)
+
+  if (fetchError || !orders || orders.length === 0) {
+    setError('Order not found. Please check your email and order ID.')
+    setOrder(null)
+    setOrderItems([])
+    setLoading(false)
+    return
+  }
+
+  // Find the order that matches the partial ID
+  const matchedOrder = orders.find(o => 
+    o.id.toLowerCase().replace(/-/g, '').includes(cleanOrderId)
+  )
+
+  if (!matchedOrder) {
+    setError('Order not found. Please check your email and order ID.')
+    setOrder(null)
+    setOrderItems([])
+    setLoading(false)
+    return
+  }
+
+  setOrder(matchedOrder)
+
+  // Get order items
+  const { data: items } = await supabase
+    .from('order_items')
+    .select(`
+      *,
+      product:products!product_id(name)
+    `)
+    .eq('order_id', matchedOrder.id)
+
+  if (items) setOrderItems(items)
+
+  setLoading(false)
+}
 
   const statusInfo = order ? STATUS_DISPLAY[order.status] || STATUS_DISPLAY.pending : null
 
