@@ -226,12 +226,15 @@ export async function POST(request: NextRequest) {
 
     // Create order addons and decrement inventory
     if (addonCart && Object.keys(addonCart).length > 0) {
-      const orderAddons = Object.entries(addonCart).map(([addonId, details]: [string, { quantity: number; price: number }]) => ({
-        order_id: order.id,
-        addon_id: addonId,
-        quantity: details.quantity,
-        unit_price: details.price
-      }))
+      const orderAddons = Object.entries(addonCart).map(([addonId, details]) => {
+  const { quantity, price } = details as { quantity: number; price: number }
+  return {
+    order_id: order.id,
+    addon_id: addonId,
+    quantity,
+    unit_price: price
+  }
+})
 
       const { error: addonsError } = await supabase
         .from('order_addons')
