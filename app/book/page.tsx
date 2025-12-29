@@ -301,7 +301,7 @@ export default function BookPage() {
 
   const daysUntilDelivery = getDaysUntilDelivery()
   const isEarlyBird = daysUntilDelivery !== null && daysUntilDelivery >= EARLY_BIRD_DAYS
-  const isRushOrder = daysUntilDelivery !== null && daysUntilDelivery === 1
+  const isRushOrder = daysUntilDelivery !== null && daysUntilDelivery <= 1
 
   const selectedCity = cities.find(c => c.id === deliveryCitySelect)
   const taxRate = selectedCity?.tax_rate || 0.095

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const daysUntilDelivery = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
     const isEarlyBird = daysUntilDelivery >= EARLY_BIRD_DAYS
-    const isRushOrder = daysUntilDelivery === 1
+    const isRushOrder = daysUntilDelivery <= 1
 
     // Validate Early Bird discount
     const expectedEarlyBirdDiscount = isEarlyBird 
