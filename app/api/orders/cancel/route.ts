@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import { sendCancellationNotification } from '../../../../lib/twilio'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -90,6 +91,37 @@ export async function POST(request: NextRequest) {
     if (reservationError) {
       console.error('Reservation release error:', reservationError)
       // Non-fatal, continue
+    }
+
+    // Restore referral credit if it was used
+    if (order.referral_credit_applied && order.referral_credit_applied > 0) {
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('id, referral_credit')
+        .eq('email', order.customer_email.toLowerCase())
+        .single()
+
+      if (customer) {
+        await supabase
+          .from('customers')
+          .update({ 
+            referral_credit: customer.referral_credit + order.referral_credit_applied 
+          })
+          .eq('id', customer.id)
+      }
+    }
+
+    // Send SMS notification
+    if (order.customer_phone) {
+      try {
+        await sendCancellationNotification(
+          order.customer_phone,
+          order.customer_name.split(' ')[0] // First name only
+        )
+      } catch (smsError) {
+        console.error('SMS notification error:', smsError)
+        // Non-fatal, continue
+      }
     }
 
     return NextResponse.json({ 
