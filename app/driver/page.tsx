@@ -5,19 +5,27 @@ import { createClient } from '../../lib/supabase'
 import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
 
+type OrderItem = {
+  id: string
+  quantity: number
+  product: { name: string } | null
+}
+
 type Order = {
   id: string
   customer_name: string
   customer_phone: string
   delivery_address: string
-  return_address: string
+  return_address: string | null
   delivery_date: string
   return_date: string
   delivery_window: string
-  return_window: string
+  return_window: string | null
   status: string
+  return_method: string | null
   delivery_city: { id: string; name: string } | null
   return_city: { id: string; name: string } | null
+  order_items?: OrderItem[]
 }
 
 type Driver = {
@@ -53,6 +61,7 @@ export default function DriverPage() {
   const [routeStops, setRouteStops] = useState<RouteStop[]>([])
   const [mapLoaded, setMapLoaded] = useState(false)
   const [routeLoading, setRouteLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   
   // Geolocation state
   const [driverLocation, setDriverLocation] = useState<google.maps.LatLngLiteral | null>(null)
@@ -290,7 +299,12 @@ export default function DriverPage() {
       .select(`
         *,
         delivery_city:cities!delivery_city_id(id, name),
-        return_city:cities!return_city_id(id, name)
+        return_city:cities!return_city_id(id, name),
+        order_items(
+          id,
+          quantity,
+          product:products!product_id(name)
+        )
       `)
       .or(`delivery_date.eq.${selectedDate},return_date.eq.${selectedDate}`)
       .not('status', 'eq', 'cancelled')
@@ -299,12 +313,18 @@ export default function DriverPage() {
     if (data) {
       const filtered = data.filter(order => 
         (order.delivery_date === selectedDate && order.delivery_city?.id === driver.city_id) ||
-        (order.return_date === selectedDate && order.return_city?.id === driver.city_id)
+        (order.return_date === selectedDate && order.return_city?.id === driver.city_id && order.return_method !== 'ship')
       )
       setOrders(filtered)
     }
     if (error) console.error('Error loading orders:', error)
     setLoading(false)
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await loadOrders()
+    setRefreshing(false)
   }
 
   function initializeMap() {
@@ -358,12 +378,14 @@ export default function DriverPage() {
     })
 
     pickups.forEach(order => {
-      stops.push({
-        order,
-        type: 'pickup',
-        address: order.return_address,
-        window: order.return_window
-      })
+      if (order.return_address) {
+        stops.push({
+          order,
+          type: 'pickup',
+          address: order.return_address,
+          window: order.return_window || 'morning'
+        })
+      }
     })
 
     if (stops.length === 0) {
@@ -541,7 +563,8 @@ export default function DriverPage() {
     router.push('/login')
   }
 
-  const formatWindow = (window: string) => {
+  const formatWindow = (window: string | null) => {
+    if (!window) return 'N/A'
     const windows: Record<string, string> = {
       morning: '9am - 12pm',
       afternoon: '12pm - 5pm',
@@ -550,6 +573,19 @@ export default function DriverPage() {
     return windows[window] || window
   }
 
+  const formatPhone = (phone: string) => {
+    // Format for display but keep raw for tel: link
+    return phone
+  }
+
+  const getOrderItemsSummary = (order: Order) => {
+    if (!order.order_items || order.order_items.length === 0) return null
+    return order.order_items
+      .map(item => `${item.quantity}x ${item.product?.name || 'Item'}`)
+      .join(', ')
+  }
+
+  // Filter out ship-back orders from pickups (they ship themselves)
   const deliveries = orders.filter(o => 
     o.delivery_date === selectedDate && 
     o.delivery_city?.id === driver?.city_id &&
@@ -559,6 +595,7 @@ export default function DriverPage() {
   const pickups = orders.filter(o => 
     o.return_date === selectedDate && 
     o.return_city?.id === driver?.city_id &&
+    o.return_method !== 'ship' && // Exclude ship-back orders
     ['delivered', 'out_for_pickup'].includes(o.status)
   )
 
@@ -602,12 +639,21 @@ export default function DriverPage() {
             </a>
             <p className="text-sm text-gray-500">{driver?.city?.name}</p>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="px-3 py-1 text-sm border rounded-lg"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-3 py-1 text-sm border rounded-lg"
+            >
+              {refreshing ? '...' : '↻'}
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="px-3 py-1 text-sm border rounded-lg"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -653,6 +699,24 @@ export default function DriverPage() {
         ) : activeTab === 'list' ? (
           /* List View */
           <div className="flex-1 overflow-y-auto p-4">
+            {/* Summary Banner */}
+            <div className="bg-white p-4 rounded-lg border mb-4 flex justify-around text-center">
+              <div>
+                <p className="text-2xl font-bold text-cyan-600">{deliveries.length}</p>
+                <p className="text-sm text-gray-500">Deliveries</p>
+              </div>
+              <div className="border-l"></div>
+              <div>
+                <p className="text-2xl font-bold text-orange-500">{pickups.length}</p>
+                <p className="text-sm text-gray-500">Pickups</p>
+              </div>
+              <div className="border-l"></div>
+              <div>
+                <p className="text-2xl font-bold text-gray-400">{completed.length}</p>
+                <p className="text-sm text-gray-500">Done</p>
+              </div>
+            </div>
+
             {/* Deliveries */}
             <div className="mb-8">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -667,16 +731,37 @@ export default function DriverPage() {
                 <div className="space-y-4">
                   {deliveries.map(order => (
                     <div key={order.id} className="bg-white p-4 rounded-lg border">
-                      <div className="flex justify-between items-start mb-3">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
                           <p className="font-semibold">{order.customer_name}</p>
-                          <p className="text-sm text-gray-600">{order.customer_phone}</p>
+                          <a 
+                            href={`tel:${order.customer_phone}`}
+                            className="text-sm text-cyan-600 hover:underline"
+                          >
+                            {order.customer_phone}
+                          </a>
                         </div>
                         <span className="text-sm bg-cyan-100 text-cyan-800 px-2 py-1 rounded">
                           {formatWindow(order.delivery_window)}
                         </span>
                       </div>
-                      <p className="text-sm mb-4">{order.delivery_address}</p>
+                      
+                      {/* Order Items */}
+                      {getOrderItemsSummary(order) && (
+                        <p className="text-sm text-gray-600 mb-2 bg-gray-50 px-2 py-1 rounded">
+                          🧳 {getOrderItemsSummary(order)}
+                        </p>
+                      )}
+                      
+                      <p className="text-sm mb-2">{order.delivery_address}</p>
+                      <a 
+                        href={`https://maps.google.com/?q=${encodeURIComponent(order.delivery_address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-cyan-600 hover:underline block mb-4"
+                      >
+                        Open in Maps →
+                      </a>
                       <button
                         onClick={() => markDelivered(order.id)}
                         className="w-full bg-green-600 text-white py-3 rounded-lg font-medium"
@@ -703,16 +788,37 @@ export default function DriverPage() {
                 <div className="space-y-4">
                   {pickups.map(order => (
                     <div key={order.id} className="bg-white p-4 rounded-lg border">
-                      <div className="flex justify-between items-start mb-3">
+                      <div className="flex justify-between items-start mb-2">
                         <div>
                           <p className="font-semibold">{order.customer_name}</p>
-                          <p className="text-sm text-gray-600">{order.customer_phone}</p>
+                          <a 
+                            href={`tel:${order.customer_phone}`}
+                            className="text-sm text-cyan-600 hover:underline"
+                          >
+                            {order.customer_phone}
+                          </a>
                         </div>
                         <span className="text-sm bg-orange-100 text-orange-800 px-2 py-1 rounded">
                           {formatWindow(order.return_window)}
                         </span>
                       </div>
-                      <p className="text-sm mb-4">{order.return_address}</p>
+                      
+                      {/* Order Items */}
+                      {getOrderItemsSummary(order) && (
+                        <p className="text-sm text-gray-600 mb-2 bg-gray-50 px-2 py-1 rounded">
+                          🧳 {getOrderItemsSummary(order)}
+                        </p>
+                      )}
+                      
+                      <p className="text-sm mb-2">{order.return_address}</p>
+                      <a 
+                        href={`https://maps.google.com/?q=${encodeURIComponent(order.return_address || '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-cyan-600 hover:underline block mb-4"
+                      >
+                        Open in Maps →
+                      </a>
                       <button
                         onClick={() => markPickedUp(order.id)}
                         className="w-full bg-green-600 text-white py-3 rounded-lg font-medium"
@@ -737,12 +843,22 @@ export default function DriverPage() {
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-semibold">{order.customer_name}</p>
-                          <p className="text-sm text-gray-600">{order.customer_phone}</p>
+                          <a 
+                            href={`tel:${order.customer_phone}`}
+                            className="text-sm text-gray-500"
+                          >
+                            {order.customer_phone}
+                          </a>
                         </div>
                         <span className="text-sm bg-gray-100 text-gray-600 px-2 py-1 rounded">
                           ✓ Done
                         </span>
                       </div>
+                      {getOrderItemsSummary(order) && (
+                        <p className="text-sm text-gray-500 mt-2">
+                          🧳 {getOrderItemsSummary(order)}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -753,67 +869,67 @@ export default function DriverPage() {
           /* Map View */
           <div className="flex-1 flex flex-col">
             {/* Location Controls */}
-<div className="bg-white p-3 border-b flex items-center justify-between gap-2">
-  <div className="flex items-center gap-2">
-    {!trackingEnabled ? (
-      <button
-        onClick={startLocationTracking}
-        className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium"
-      >
-        <span>📍</span> Location
-      </button>
-    ) : (
-      <>
-        <span className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
-        <span className="text-sm text-gray-600">Tracking</span>
-        <button
-          onClick={centerOnDriver}
-          className="px-2 py-1 border rounded-lg text-xs"
-        >
-          Center
-        </button>
-        <button
-          onClick={stopLocationTracking}
-          className="px-2 py-1 border border-red-200 text-red-600 rounded-lg text-xs"
-        >
-          Stop
-        </button>
-      </>
-    )}
-  </div>
-  
-  {routeStops.length > 0 && (
-    <button
-      onClick={() => {
-        const stops = routeStops.filter(s => {
-          const isCompleted = s.type === 'delivery' 
-            ? ['delivered', 'out_for_pickup', 'returned'].includes(s.order.status)
-            : s.order.status === 'returned'
-          return !isCompleted
-        })
-        
-        if (stops.length === 0) {
-          alert('All stops completed!')
-          return
-        }
-        
-        const destination = encodeURIComponent(stops[stops.length - 1].address)
-        const waypoints = stops.slice(0, -1).map(s => encodeURIComponent(s.address)).join('|')
-        
-        let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`
-        if (waypoints) {
-          url += `&waypoints=${waypoints}`
-        }
-        url += '&travelmode=driving'
-        
-        window.open(url, '_blank')
-      }}
-      className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium"
-    >
-      <span>🧭</span> Navigate
-    </button>
-  )}
-</div>
+            <div className="bg-white p-3 border-b flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {!trackingEnabled ? (
+                  <button
+                    onClick={startLocationTracking}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium"
+                  >
+                    <span>📍</span> Location
+                  </button>
+                ) : (
+                  <>
+                    <span className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
+                    <span className="text-sm text-gray-600">Tracking</span>
+                    <button
+                      onClick={centerOnDriver}
+                      className="px-2 py-1 border rounded-lg text-xs"
+                    >
+                      Center
+                    </button>
+                    <button
+                      onClick={stopLocationTracking}
+                      className="px-2 py-1 border border-red-200 text-red-600 rounded-lg text-xs"
+                    >
+                      Stop
+                    </button>
+                  </>
+                )}
+              </div>
+              
+              {routeStops.length > 0 && (
+                <button
+                  onClick={() => {
+                    const stops = routeStops.filter(s => {
+                      const isCompleted = s.type === 'delivery' 
+                        ? ['delivered', 'out_for_pickup', 'returned'].includes(s.order.status)
+                        : s.order.status === 'returned'
+                      return !isCompleted
+                    })
+                    
+                    if (stops.length === 0) {
+                      alert('All stops completed!')
+                      return
+                    }
+                    
+                    const destination = encodeURIComponent(stops[stops.length - 1].address)
+                    const waypoints = stops.slice(0, -1).map(s => encodeURIComponent(s.address)).join('|')
+                    
+                    let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`
+                    if (waypoints) {
+                      url += `&waypoints=${waypoints}`
+                    }
+                    url += '&travelmode=driving'
+                    
+                    window.open(url, '_blank')
+                  }}
+                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium"
+                >
+                  <span>🧭</span> Navigate
+                </button>
+              )}
+            </div>
             
             {locationError && (
               <div className="bg-red-50 text-red-700 p-3 text-sm">
@@ -896,14 +1012,22 @@ export default function DriverPage() {
                             )}
                           </div>
                           <p className="text-sm text-gray-600 truncate">{stop.address}</p>
-                          <a 
-                            href={`https://maps.google.com/?q=${encodeURIComponent(stop.address)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-cyan-600 hover:underline"
-                          >
-                            Open in Google Maps →
-                          </a>
+                          <div className="flex gap-3 mt-1">
+                            <a 
+                              href={`tel:${stop.order.customer_phone}`}
+                              className="text-sm text-cyan-600 hover:underline"
+                            >
+                              Call
+                            </a>
+                            <a 
+                              href={`https://maps.google.com/?q=${encodeURIComponent(stop.address)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-cyan-600 hover:underline"
+                            >
+                              Maps →
+                            </a>
+                          </div>
                         </div>
                       </div>
                     )
