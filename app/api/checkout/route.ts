@@ -13,6 +13,9 @@ const supabase = createClient(
 const EARLY_BIRD_DAYS = 60
 const EARLY_BIRD_DISCOUNT_PERCENT = 10
 const RUSH_FEE = 999 // $9.99 in cents
+const DELIVERY_FEE_STANDARD = 1999
+const DELIVERY_FEE_ONE_WAY = 999
+const SHIP_BACK_FEE = 2999
 
 type AddonCartItem = { quantity: number; price: number }
 type CartItem = { quantity: number; dailyRate?: number; days?: number }
@@ -41,9 +44,16 @@ export async function POST(request: NextRequest) {
       promoDiscount,
       rushFee,
       deliveryFee,
+      shipBackFee,
       tax,
       total,
-      promoCodeId
+      promoCodeId,
+      // Ship back fields
+      isShipBack,
+      shipBackAddress,
+      shipBackCity,
+      shipBackState,
+      shipBackZip
     } = body
 
     // Server-side validation of Early Bird and Rush Fee
@@ -186,23 +196,30 @@ export async function POST(request: NextRequest) {
         customer_phone: customerPhone,
         delivery_address: deliveryAddress,
         delivery_city_id: deliveryCityId,
-        return_address: returnAddress,
-        return_city_id: returnCityId,
+        return_address: isShipBack ? null : returnAddress,
+        return_city_id: isShipBack ? null : returnCityId,
         delivery_date: deliveryDate,
         return_date: returnDate,
         delivery_window: deliveryWindow,
-        return_window: returnWindow,
+        return_window: isShipBack ? null : returnWindow,
         subtotal,
         discount: totalDiscount,
         early_bird_discount: earlyBirdDiscount || 0,
         promo_discount: promoDiscount || 0,
         rush_fee: rushFee || 0,
-        delivery_fee: deliveryFee || 1999,
+        delivery_fee: deliveryFee || DELIVERY_FEE_STANDARD,
         promo_code_id: promoCodeId || null,
         tax,
         total,
         stripe_payment_intent_id: paymentIntent.id,
-        status: 'pending'
+        status: 'pending',
+        // Ship back fields
+        return_method: isShipBack ? 'ship' : 'pickup',
+        ship_back_fee: shipBackFee || 0,
+        ship_back_address: shipBackAddress || null,
+        ship_back_city: shipBackCity || null,
+        ship_back_state: shipBackState || null,
+        ship_back_zip: shipBackZip || null
       })
       .select()
       .single()

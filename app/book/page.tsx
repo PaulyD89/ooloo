@@ -99,6 +99,10 @@ type Addon = {
 const EARLY_BIRD_DAYS = 60
 const EARLY_BIRD_DISCOUNT_PERCENT = 10
 const RUSH_FEE = 999 // $9.99 in cents
+const DELIVERY_FEE_STANDARD = 1999 // $19.99 for round-trip (delivery + pickup)
+const DELIVERY_FEE_ONE_WAY = 999 // $9.99 for one-way (delivery only)
+const SHIP_BACK_FEE = 2999 // $29.99 flat rate for UPS ship back
+const SHIP_BACK_OPTION_ID = 'ups-ship-back' // Special ID for the ship back option
 
 function CheckoutForm({ orderId }: { orderId: string }) {
   const stripe = useStripe()
@@ -210,6 +214,11 @@ export default function BookPage() {
   
   const [deliveryCitySelect, setDeliveryCitySelect] = useState('')
   const [returnCitySelect, setReturnCitySelect] = useState('')
+  const [isShipBack, setIsShipBack] = useState(false)
+  const [shipBackStreet, setShipBackStreet] = useState('')
+  const [shipBackCity, setShipBackCity] = useState('')
+  const [shipBackState, setShipBackState] = useState('')
+  const [shipBackZip, setShipBackZip] = useState('')
   const [deliveryDate, setDeliveryDate] = useState('')
   const [returnDate, setReturnDate] = useState('')
   const [cart, setCart] = useState<Record<string, number>>({})
@@ -352,11 +361,14 @@ export default function BookPage() {
   // Rush fee
   const rushFee = isRushOrder ? RUSH_FEE : 0
 
-  const deliveryFee = 1999
+  // Delivery and ship back fees
+  const deliveryFee = isShipBack ? DELIVERY_FEE_ONE_WAY : DELIVERY_FEE_STANDARD
+  const shipBackFee = isShipBack ? SHIP_BACK_FEE : 0
+  
   const subtotalAfterDiscounts = rentalSubtotal - totalDiscount + addonsSubtotal
-  const taxableAmount = subtotalAfterDiscounts + deliveryFee + rushFee
+  const taxableAmount = subtotalAfterDiscounts + deliveryFee + shipBackFee + rushFee
   const tax = Math.round(taxableAmount * taxRate)
-  const total = subtotalAfterDiscounts + deliveryFee + rushFee + tax
+  const total = subtotalAfterDiscounts + deliveryFee + shipBackFee + rushFee + tax
 
   const updateCart = (productId: string, delta: number) => {
     const product = products.find(p => p.id === productId)
@@ -446,13 +458,14 @@ export default function BookPage() {
     setPromoError('')
   }
 
+  // For ship-back, we don't need return address (already collected in Step 1)
   const isStep3Valid = customerName && customerEmail && customerPhone && 
     deliveryStreet && deliveryCityAddress && deliveryState && deliveryZip &&
-    returnStreet && returnCityAddress && returnState && returnZip
+    (isShipBack || (returnStreet && returnCityAddress && returnState && returnZip))
 
   const handleCheckout = async () => {
     const fullDeliveryAddress = `${deliveryStreet}, ${deliveryCityAddress}, ${deliveryState} ${deliveryZip}`
-    const fullReturnAddress = `${returnStreet}, ${returnCityAddress}, ${returnState} ${returnZip}`
+    const fullReturnAddress = isShipBack ? '' : `${returnStreet}, ${returnCityAddress}, ${returnState} ${returnZip}`
 
     const cartDetails: Record<string, any> = {}
     products.forEach(product => {
@@ -487,12 +500,12 @@ export default function BookPage() {
         customerPhone,
         deliveryAddress: fullDeliveryAddress,
         deliveryCityId: deliveryCitySelect,
-        returnAddress: fullReturnAddress,
-        returnCityId: returnCitySelect,
+        returnAddress: isShipBack ? null : fullReturnAddress,
+        returnCityId: isShipBack ? null : returnCitySelect,
         deliveryDate,
         returnDate,
         deliveryWindow,
-        returnWindow,
+        returnWindow: isShipBack ? null : returnWindow,
         cart: cartDetails,
         addons: addonDetails,
         rentalSubtotal,
@@ -502,9 +515,16 @@ export default function BookPage() {
         promoDiscount,
         rushFee,
         deliveryFee,
+        shipBackFee,
         tax,
         total,
-        promoCodeId: appliedPromo?.id || null
+        promoCodeId: appliedPromo?.id || null,
+        // Ship back fields
+        isShipBack,
+        shipBackAddress: isShipBack ? shipBackStreet : null,
+        shipBackCity: isShipBack ? shipBackCity : null,
+        shipBackState: isShipBack ? shipBackState : null,
+        shipBackZip: isShipBack ? shipBackZip : null
       })
     })
 
@@ -563,16 +583,82 @@ export default function BookPage() {
               <div>
                 <label className="block text-sm font-medium mb-2">Return City</label>
                 <select 
-                  value={returnCitySelect}
-                  onChange={e => setReturnCitySelect(e.target.value)}
+                  value={isShipBack ? SHIP_BACK_OPTION_ID : returnCitySelect}
+                  onChange={e => {
+                    if (e.target.value === SHIP_BACK_OPTION_ID) {
+                      setIsShipBack(true)
+                      setReturnCitySelect('')
+                    } else {
+                      setIsShipBack(false)
+                      setReturnCitySelect(e.target.value)
+                    }
+                  }}
                   className="w-full p-3 border rounded-lg"
                 >
                   <option value="">Select a city</option>
                   {cities.map(city => (
                     <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
+                  <option value={SHIP_BACK_OPTION_ID}>📦 Other (UPS Ship Back)</option>
                 </select>
+                {isShipBack && (
+                  <p className="text-sm text-blue-600 mt-2">
+                    We'll include a prepaid UPS label. Just drop off at any UPS location!
+                  </p>
+                )}
               </div>
+
+              {/* Ship Back Address - only show when UPS Ship Back is selected */}
+              {isShipBack && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
+                  <h4 className="font-medium text-blue-800">Where will you drop off at UPS?</h4>
+                  <p className="text-sm text-blue-600">Enter the address where you'll be when returning the luggage. We'll find the nearest UPS location for you.</p>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Street Address</label>
+                    <input 
+                      type="text" 
+                      value={shipBackStreet}
+                      onChange={e => setShipBackStreet(e.target.value)}
+                      className="w-full p-3 border rounded-lg" 
+                      placeholder="123 Main St" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-6 gap-4">
+                    <div className="col-span-3">
+                      <label className="block text-sm font-medium mb-2">City</label>
+                      <input 
+                        type="text" 
+                        value={shipBackCity}
+                        onChange={e => setShipBackCity(e.target.value)}
+                        className="w-full p-3 border rounded-lg" 
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium mb-2">State</label>
+                      <select
+                        value={shipBackState}
+                        onChange={e => setShipBackState(e.target.value)}
+                        className="w-full p-3 border rounded-lg h-[50px]"
+                      >
+                        <option value=""></option>
+                        {US_STATES.map(state => (
+                          <option key={state.code} value={state.code}>{state.code}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium mb-2">ZIP</label>
+                      <input 
+                        type="text" 
+                        value={shipBackZip}
+                        onChange={e => setShipBackZip(e.target.value)}
+                        className="w-full p-3 border rounded-lg"
+                        placeholder="90210"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2">Delivery Date</label>
@@ -613,9 +699,23 @@ export default function BookPage() {
               </div>
             )}
 
+            {/* Ship Back pricing info */}
+            {isShipBack && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <span className="text-blue-800 font-medium">📦 UPS Ship Back</span>
+                <span className="text-blue-600 ml-2">$9.99 delivery + $29.99 ship back fee (includes prepaid label & poly bag)</span>
+              </div>
+            )}
+
             <button
               onClick={() => setStep(2)}
-              disabled={!deliveryCitySelect || !returnCitySelect || !deliveryDate || !returnDate}
+              disabled={
+                !deliveryCitySelect || 
+                !deliveryDate || 
+                !returnDate || 
+                (!returnCitySelect && !isShipBack) ||
+                (isShipBack && (!shipBackStreet || !shipBackCity || !shipBackState || !shipBackZip))
+              }
               className="w-full mt-8 bg-black text-white py-4 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               Continue
@@ -849,6 +949,8 @@ export default function BookPage() {
                 </div>
               </div>
 
+              {/* Return Address - only show for pickup, not ship-back */}
+              {!isShipBack ? (
               <div className="pt-4 border-t">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold">Return Address</h3>
@@ -933,13 +1035,33 @@ export default function BookPage() {
                   </div>
                 </div>
               </div>
+              ) : (
+                <div className="pt-4 border-t">
+                  <h3 className="font-semibold mb-4">📦 UPS Ship Back</h3>
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium">Ship from:</span> {shipBackStreet}, {shipBackCity}, {shipBackState} {shipBackZip}
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      <span className="font-medium">Return by:</span> {returnDate}
+                    </p>
+                    <div className="pt-3 border-t border-blue-200">
+                      <p className="text-sm text-blue-800">
+                        ✓ Prepaid UPS label will be emailed after purchase<br />
+                        ✓ Free UPS Poly Bag included with your delivery<br />
+                        ✓ Drop off at any UPS location by return date
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Travel Pack Upsell */}
-              {addons.length > 0 && (
+              {addons.filter(a => a.slug !== 'ups-poly-bag').length > 0 && (
                 <div className="pt-4 border-t">
                   <h3 className="font-semibold mb-4">Add to your trip</h3>
                   <div className="space-y-3">
-                    {addons.map(addon => {
+                    {addons.filter(addon => addon.slug !== 'ups-poly-bag').map(addon => {
                       const inCart = addonCart[addon.id] || 0
                       const soldOut = addon.quantity_available === 0 && inCart === 0
                       const cantAddMore = inCart >= addon.quantity_available
@@ -1050,6 +1172,12 @@ export default function BookPage() {
                   <span>${(addonsSubtotal / 100).toFixed(2)}</span>
                 </div>
               )}
+              {isShipBack && (
+                <div className="flex justify-between mb-2">
+                  <span>UPS Poly Bag (included)</span>
+                  <span>$0.00</span>
+                </div>
+              )}
               {earlyBirdDiscount > 0 && (
                 <div className="flex justify-between mb-2 text-green-600">
                   <span>Early Bird Discount (10%)</span>
@@ -1063,9 +1191,15 @@ export default function BookPage() {
                 </div>
               )}
               <div className="flex justify-between mb-2">
-                <span>Delivery & Pickup Fee</span>
+                <span>{isShipBack ? 'Delivery Fee' : 'Delivery & Pickup Fee'}</span>
                 <span>${(deliveryFee / 100).toFixed(2)}</span>
               </div>
+              {shipBackFee > 0 && (
+                <div className="flex justify-between mb-2 text-blue-600">
+                  <span>UPS Ship Back Fee</span>
+                  <span>${(shipBackFee / 100).toFixed(2)}</span>
+                </div>
+              )}
               {rushFee > 0 && (
                 <div className="flex justify-between mb-2 text-amber-600">
                   <span>Rush Fee</span>
