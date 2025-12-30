@@ -16,6 +16,15 @@ type Product = {
   slug: string
 }
 
+type Addon = {
+  id: string
+  name: string
+  slug: string
+  quantity_available: number
+  price: number
+  is_active: boolean
+}
+
 type InventoryItem = {
   id: string
   sku: string
@@ -43,13 +52,14 @@ export default function InventoryPage() {
   
   const [cities, setCities] = useState<City[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [addons, setAddons] = useState<Addon[]>([])
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [summary, setSummary] = useState<InventorySummary[]>([])
   const [loading, setLoading] = useState(true)
   
   const [selectedCity, setSelectedCity] = useState<string>('all')
   const [selectedProduct, setSelectedProduct] = useState<string>('all')
-  const [viewMode, setViewMode] = useState<'summary' | 'detail'>('summary')
+  const [viewMode, setViewMode] = useState<'summary' | 'detail' | 'addons'>('summary')
   
   // Add inventory modal
   const [showAddModal, setShowAddModal] = useState(false)
@@ -57,6 +67,11 @@ export default function InventoryPage() {
   const [addProduct, setAddProduct] = useState('')
   const [addQuantity, setAddQuantity] = useState(1)
   const [adding, setAdding] = useState(false)
+
+  // Edit addon modal
+  const [editingAddon, setEditingAddon] = useState<Addon | null>(null)
+  const [newAddonQuantity, setNewAddonQuantity] = useState(0)
+  const [updatingAddon, setUpdatingAddon] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
@@ -97,14 +112,16 @@ export default function InventoryPage() {
   async function loadData() {
     setLoading(true)
     
-    // Load cities and products
-    const [citiesRes, productsRes] = await Promise.all([
+    // Load cities, products, and addons
+    const [citiesRes, productsRes, addonsRes] = await Promise.all([
       supabase.from('cities').select('id, name').eq('is_active', true).order('name'),
-      supabase.from('products').select('id, name, slug').eq('is_active', true).order('sort_order')
+      supabase.from('products').select('id, name, slug').eq('is_active', true).order('sort_order'),
+      supabase.from('addons').select('*').order('name')
     ])
     
     if (citiesRes.data) setCities(citiesRes.data)
     if (productsRes.data) setProducts(productsRes.data.filter(p => p.slug !== 'set'))
+    if (addonsRes.data) setAddons(addonsRes.data)
     
     // Load inventory items
     const { data: inventoryData } = await supabase
@@ -245,6 +262,42 @@ export default function InventoryPage() {
     setAdding(false)
   }
 
+  async function updateAddonQuantity() {
+    if (!editingAddon) return
+    
+    setUpdatingAddon(true)
+    
+    const { error } = await supabase
+      .from('addons')
+      .update({ quantity_available: newAddonQuantity })
+      .eq('id', editingAddon.id)
+    
+    if (error) {
+      console.error('Error updating addon:', error)
+      alert('Failed to update addon quantity')
+    } else {
+      setAddons(prev => prev.map(a => 
+        a.id === editingAddon.id ? { ...a, quantity_available: newAddonQuantity } : a
+      ))
+      setEditingAddon(null)
+    }
+    
+    setUpdatingAddon(false)
+  }
+
+  async function toggleAddonActive(addon: Addon) {
+    const { error } = await supabase
+      .from('addons')
+      .update({ is_active: !addon.is_active })
+      .eq('id', addon.id)
+    
+    if (!error) {
+      setAddons(prev => prev.map(a => 
+        a.id === addon.id ? { ...a, is_active: !a.is_active } : a
+      ))
+    }
+  }
+
   async function retireItem(itemId: string) {
     if (!confirm('Are you sure you want to retire this bag? It will no longer be available for rental.')) {
       return
@@ -308,19 +361,27 @@ export default function InventoryPage() {
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <a href="/admin">
-              <img src="/oolooicon.jpg" alt="ooloo" className="h-10" />
+              <img src="/oolooicon.png" alt="ooloo" className="h-10" />
             </a>
             <div>
               <h1 className="text-xl font-bold">Inventory Management</h1>
               <a href="/admin" className="text-sm text-cyan-600 hover:underline">← Back to Orders</a>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-black text-white px-4 py-2 rounded-lg font-medium"
-          >
-            + Add Bags
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadData()}
+              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-black text-white px-4 py-2 rounded-lg font-medium"
+            >
+              + Add Bags
+            </button>
+          </div>
         </div>
       </header>
 
@@ -333,6 +394,7 @@ export default function InventoryPage() {
               value={selectedCity}
               onChange={e => setSelectedCity(e.target.value)}
               className="p-2 border rounded-lg"
+              disabled={viewMode === 'addons'}
             >
               <option value="all">All Cities</option>
               {cities.map(city => (
@@ -347,6 +409,7 @@ export default function InventoryPage() {
               value={selectedProduct}
               onChange={e => setSelectedProduct(e.target.value)}
               className="p-2 border rounded-lg"
+              disabled={viewMode === 'addons'}
             >
               <option value="all">All Products</option>
               {products.map(product => (
@@ -369,6 +432,12 @@ export default function InventoryPage() {
                 className={`px-4 py-2 text-sm ${viewMode === 'detail' ? 'bg-black text-white' : 'bg-white'}`}
               >
                 Detail
+              </button>
+              <button
+                onClick={() => setViewMode('addons')}
+                className={`px-4 py-2 text-sm ${viewMode === 'addons' ? 'bg-black text-white' : 'bg-white'}`}
+              >
+                Add-ons
               </button>
             </div>
           </div>
@@ -407,7 +476,7 @@ export default function InventoryPage() {
               </div>
             ))}
           </div>
-        ) : (
+        ) : viewMode === 'detail' ? (
           /* Detail View */
           <div className="bg-white rounded-lg border overflow-hidden">
             <table className="w-full">
@@ -461,6 +530,75 @@ export default function InventoryPage() {
             
             {filteredInventory.length === 0 && (
               <p className="text-center py-8 text-gray-500">No inventory items found</p>
+            )}
+          </div>
+        ) : (
+          /* Add-ons View */
+          <div className="bg-white rounded-lg border overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left p-4 font-medium">Add-on</th>
+                  <th className="text-left p-4 font-medium">Price</th>
+                  <th className="text-left p-4 font-medium">Quantity Available</th>
+                  <th className="text-left p-4 font-medium">Status</th>
+                  <th className="text-left p-4 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {addons.map(addon => (
+                  <tr key={addon.id} className={!addon.is_active ? 'opacity-50' : ''}>
+                    <td className="p-4">
+                      <p className="font-medium">{addon.name}</p>
+                      <p className="text-xs text-gray-500">{addon.slug}</p>
+                    </td>
+                    <td className="p-4">
+                      {addon.price === 0 ? (
+                        <span className="text-green-600">Free</span>
+                      ) : (
+                        `$${(addon.price / 100).toFixed(2)}`
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <span className={`font-medium ${addon.quantity_available <= 10 ? 'text-orange-600' : ''}`}>
+                        {addon.quantity_available}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        addon.is_active 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {addon.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            setEditingAddon(addon)
+                            setNewAddonQuantity(addon.quantity_available)
+                          }}
+                          className="text-sm text-cyan-600 hover:underline"
+                        >
+                          Edit Qty
+                        </button>
+                        <button
+                          onClick={() => toggleAddonActive(addon)}
+                          className={`text-sm hover:underline ${addon.is_active ? 'text-red-600' : 'text-green-600'}`}
+                        >
+                          {addon.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {addons.length === 0 && (
+              <p className="text-center py-8 text-gray-500">No add-ons found</p>
             )}
           </div>
         )}
@@ -527,6 +665,45 @@ export default function InventoryPage() {
                 className="flex-1 bg-black text-white py-3 rounded-lg font-medium disabled:bg-gray-300"
               >
                 {adding ? 'Adding...' : 'Add Bags'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Addon Quantity Modal */}
+      {editingAddon && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold mb-4">Edit {editingAddon.name}</h2>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">Quantity Available</label>
+              <input
+                type="number"
+                min="0"
+                value={newAddonQuantity}
+                onChange={e => setNewAddonQuantity(parseInt(e.target.value) || 0)}
+                className="w-full p-3 border rounded-lg"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Current: {editingAddon.quantity_available}
+              </p>
+            </div>
+            
+            <div className="flex gap-4 mt-6">
+              <button
+                onClick={() => setEditingAddon(null)}
+                className="flex-1 py-3 border rounded-lg font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={updateAddonQuantity}
+                disabled={updatingAddon}
+                className="flex-1 bg-black text-white py-3 rounded-lg font-medium disabled:bg-gray-300"
+              >
+                {updatingAddon ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>

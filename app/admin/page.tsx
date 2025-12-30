@@ -20,16 +20,29 @@ type Order = {
   customer_email: string
   customer_phone: string
   delivery_address: string
-  return_address: string
+  return_address: string | null
   delivery_date: string
   return_date: string
   delivery_window: string
-  return_window: string
+  return_window: string | null
   subtotal: number
+  discount: number
+  early_bird_discount: number
+  promo_discount: number
+  rush_fee: number
+  delivery_fee: number
   tax: number
   total: number
   status: string
   created_at: string
+  return_method: string | null
+  ship_back_fee: number | null
+  ship_back_address: string | null
+  ship_back_city: string | null
+  ship_back_state: string | null
+  ship_back_zip: string | null
+  ups_tracking_number: string | null
+  ups_label_url: string | null
   delivery_city: { name: string } | null
   return_city: { name: string } | null
   order_items?: OrderItem[]
@@ -72,6 +85,9 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState<'all' | 'today_delivery' | 'today_pickup' | 'custom'>('all')
+  const [customDate, setCustomDate] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
@@ -80,6 +96,9 @@ export default function AdminPage() {
   
   const router = useRouter()
   const supabase = createClient()
+
+  // Get today's date in YYYY-MM-DD format
+  const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
     checkAuth()
@@ -153,7 +172,6 @@ export default function AdminPage() {
   async function loadInventoryAlerts() {
     setAlertsLoading(true)
     
-    // Get cities and products
     const [citiesRes, productsRes, inventoryRes] = await Promise.all([
       supabase.from('cities').select('id, name').eq('is_active', true),
       supabase.from('products').select('id, name, slug').eq('is_active', true),
@@ -164,16 +182,14 @@ export default function AdminPage() {
     const products = (productsRes.data || []).filter(p => p.slug !== 'set')
     const inventory = inventoryRes.data || []
 
-    // Check next 14 days
     const alerts: InventoryAlert[] = []
-    const today = new Date()
+    const todayDate = new Date()
     
     for (let i = 0; i < 14; i++) {
-      const checkDate = new Date(today)
-      checkDate.setDate(today.getDate() + i)
+      const checkDate = new Date(todayDate)
+      checkDate.setDate(todayDate.getDate() + i)
       const dateStr = checkDate.toISOString().split('T')[0]
       
-      // Get reservations that overlap with this date
       const { data: reservations } = await supabase
         .from('reservations')
         .select('inventory_item_id')
@@ -182,7 +198,6 @@ export default function AdminPage() {
       
       const reservedItemIds = new Set(reservations?.map(r => r.inventory_item_id) || [])
       
-      // Check each city/product combination
       for (const city of cities) {
         for (const product of products) {
           const totalItems = inventory.filter(
@@ -239,12 +254,37 @@ export default function AdminPage() {
     }
   }
 
-  const filteredOrders = filter === 'all' 
-    ? orders 
-    : orders.filter(o => o.status === filter)
+  // Filter orders
+  const filteredOrders = orders.filter(order => {
+    // Status filter
+    if (filter !== 'all' && order.status !== filter) return false
+    
+    // Date filter
+    if (dateFilter === 'today_delivery' && order.delivery_date !== today) return false
+    if (dateFilter === 'today_pickup' && order.return_date !== today) return false
+    if (dateFilter === 'custom' && customDate) {
+      if (order.delivery_date !== customDate && order.return_date !== customDate) return false
+    }
+    
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const matchesName = order.customer_name.toLowerCase().includes(query)
+      const matchesEmail = order.customer_email.toLowerCase().includes(query)
+      const matchesId = order.id.toLowerCase().includes(query.replace(/-/g, ''))
+      const matchesPhone = order.customer_phone?.includes(query)
+      if (!matchesName && !matchesEmail && !matchesId && !matchesPhone) return false
+    }
+    
+    return true
+  })
+
+  // Count today's orders
+  const todayDeliveries = orders.filter(o => o.delivery_date === today && !['cancelled', 'returned'].includes(o.status)).length
+  const todayPickups = orders.filter(o => o.return_date === today && !['cancelled', 'pending', 'confirmed'].includes(o.status)).length
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -253,12 +293,12 @@ export default function AdminPage() {
 
   const formatAlertDate = (dateStr: string) => {
     const date = new Date(dateStr + 'T00:00:00')
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
+    const todayDate = new Date()
+    todayDate.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(todayDate)
     tomorrow.setDate(tomorrow.getDate() + 1)
     
-    if (date.getTime() === today.getTime()) return 'Today'
+    if (date.getTime() === todayDate.getTime()) return 'Today'
     if (date.getTime() === tomorrow.getTime()) return 'Tomorrow'
     
     return date.toLocaleDateString('en-US', {
@@ -268,7 +308,8 @@ export default function AdminPage() {
     })
   }
 
-  const formatWindow = (window: string) => {
+  const formatWindow = (window: string | null) => {
+    if (!window) return 'N/A'
     const windows: Record<string, string> = {
       morning: '9am - 12pm',
       afternoon: '12pm - 5pm',
@@ -277,7 +318,6 @@ export default function AdminPage() {
     return windows[window] || window
   }
 
-  // Group alerts by date
   const alertsByDate = inventoryAlerts.reduce((acc, alert) => {
     if (!acc[alert.date]) acc[alert.date] = []
     acc[alert.date].push(alert)
@@ -341,6 +381,32 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-6xl mx-auto p-6">
+        {/* Today's Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <button
+            onClick={() => { setDateFilter('today_delivery'); setFilter('all'); }}
+            className={`p-4 rounded-lg border text-left transition ${dateFilter === 'today_delivery' ? 'bg-purple-50 border-purple-300' : 'bg-white hover:bg-gray-50'}`}
+          >
+            <p className="text-sm text-gray-500">Today's Deliveries</p>
+            <p className="text-2xl font-bold">{todayDeliveries}</p>
+          </button>
+          <button
+            onClick={() => { setDateFilter('today_pickup'); setFilter('all'); }}
+            className={`p-4 rounded-lg border text-left transition ${dateFilter === 'today_pickup' ? 'bg-orange-50 border-orange-300' : 'bg-white hover:bg-gray-50'}`}
+          >
+            <p className="text-sm text-gray-500">Today's Pickups</p>
+            <p className="text-2xl font-bold">{todayPickups}</p>
+          </button>
+          <div className="p-4 bg-white rounded-lg border">
+            <p className="text-sm text-gray-500">Total Orders</p>
+            <p className="text-2xl font-bold">{orders.length}</p>
+          </div>
+          <div className="p-4 bg-white rounded-lg border">
+            <p className="text-sm text-gray-500">Active Rentals</p>
+            <p className="text-2xl font-bold">{orders.filter(o => o.status === 'delivered').length}</p>
+          </div>
+        </div>
+
         {/* Inventory Alerts */}
         {!alertsLoading && inventoryAlerts.length > 0 && (
           <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -374,7 +440,40 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Filter tabs */}
+        {/* Search and Date Filter */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search by name, email, phone, or order ID..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full p-3 border rounded-lg"
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value as any)}
+              className="p-3 border rounded-lg bg-white"
+            >
+              <option value="all">All Dates</option>
+              <option value="today_delivery">Today's Deliveries</option>
+              <option value="today_pickup">Today's Pickups</option>
+              <option value="custom">Custom Date</option>
+            </select>
+            {dateFilter === 'custom' && (
+              <input
+                type="date"
+                value={customDate}
+                onChange={e => setCustomDate(e.target.value)}
+                className="p-3 border rounded-lg"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Status filter tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           <button
             onClick={() => setFilter('all')}
@@ -400,7 +499,9 @@ export default function AdminPage() {
         {loading ? (
           <div className="text-center py-12">Loading orders...</div>
         ) : filteredOrders.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">No orders found</div>
+          <div className="text-center py-12 text-gray-500">
+            {searchQuery || dateFilter !== 'all' ? 'No orders match your filters' : 'No orders found'}
+          </div>
         ) : (
           <div className="grid gap-4">
             {filteredOrders.map(order => (
@@ -413,21 +514,33 @@ export default function AdminPage() {
                   <div>
                     <h3 className="font-semibold text-lg">{order.customer_name}</h3>
                     <p className="text-sm text-gray-500">{order.customer_email}</p>
+                    <p className="text-xs text-gray-400 font-mono mt-1">#{order.id.slice(0, 8).toUpperCase()}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm capitalize ${STATUS_COLORS[order.status]}`}>
-                    {order.status.replace(/_/g, ' ')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {order.return_method === 'ship' && (
+                      <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                        📦 UPS Ship Back
+                      </span>
+                    )}
+                    <span className={`px-3 py-1 rounded-full text-sm capitalize ${STATUS_COLORS[order.status]}`}>
+                      {order.status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
                 </div>
                 <div className="grid md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <p className="text-gray-500">Delivery</p>
-                    <p className="font-medium">{formatDate(order.delivery_date)}</p>
+                    <p className={`font-medium ${order.delivery_date === today ? 'text-purple-600' : ''}`}>
+                      {order.delivery_date === today ? '📍 TODAY' : formatDate(order.delivery_date)}
+                    </p>
                     <p>{order.delivery_city?.name}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Return</p>
-                    <p className="font-medium">{formatDate(order.return_date)}</p>
-                    <p>{order.return_city?.name}</p>
+                    <p className={`font-medium ${order.return_date === today ? 'text-orange-600' : ''}`}>
+                      {order.return_date === today ? '📍 TODAY' : formatDate(order.return_date)}
+                    </p>
+                    <p>{order.return_method === 'ship' ? 'UPS Ship Back' : order.return_city?.name}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Total</p>
@@ -447,7 +560,7 @@ export default function AdminPage() {
             <div className="p-6 border-b flex justify-between items-start">
               <div>
                 <h2 className="text-xl font-bold">{selectedOrder.customer_name}</h2>
-                <p className="text-sm text-gray-500 font-mono">{selectedOrder.id}</p>
+                <p className="text-sm text-gray-500 font-mono">#{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
               </div>
               <button 
                 onClick={() => {
@@ -512,19 +625,62 @@ export default function AdminPage() {
               {/* Delivery info */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="font-semibold mb-2">Delivery</h3>
-                  <p className="font-medium">{formatDate(selectedOrder.delivery_date)}</p>
+                  <h3 className="font-semibold mb-2">📦 Delivery</h3>
+                  <p className={`font-medium ${selectedOrder.delivery_date === today ? 'text-purple-600' : ''}`}>
+                    {selectedOrder.delivery_date === today ? '📍 TODAY - ' : ''}{formatDate(selectedOrder.delivery_date)}
+                  </p>
                   <p className="text-gray-600">{formatWindow(selectedOrder.delivery_window)}</p>
                   <p className="mt-2">{selectedOrder.delivery_address}</p>
                   <p className="text-gray-600">{selectedOrder.delivery_city?.name}</p>
                 </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Return</h3>
-                  <p className="font-medium">{formatDate(selectedOrder.return_date)}</p>
-                  <p className="text-gray-600">{formatWindow(selectedOrder.return_window)}</p>
-                  <p className="mt-2">{selectedOrder.return_address}</p>
-                  <p className="text-gray-600">{selectedOrder.return_city?.name}</p>
-                </div>
+                
+                {/* Return info - different for ship-back vs pickup */}
+                {selectedOrder.return_method === 'ship' ? (
+                  <div>
+                    <h3 className="font-semibold mb-2">📦 UPS Ship Back</h3>
+                    <p className={`font-medium ${selectedOrder.return_date === today ? 'text-orange-600' : ''}`}>
+                      Return by: {selectedOrder.return_date === today ? '📍 TODAY - ' : ''}{formatDate(selectedOrder.return_date)}
+                    </p>
+                    <p className="mt-2 text-sm text-gray-600">Customer drop-off location:</p>
+                    <p>{selectedOrder.ship_back_address}</p>
+                    <p>{selectedOrder.ship_back_city}, {selectedOrder.ship_back_state} {selectedOrder.ship_back_zip}</p>
+                    
+                    {selectedOrder.ups_tracking_number && (
+                      <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm font-medium text-blue-800">UPS Tracking</p>
+                        <a 
+                          href={`https://www.ups.com/track?tracknum=${selectedOrder.ups_tracking_number}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline font-mono text-sm"
+                        >
+                          {selectedOrder.ups_tracking_number}
+                        </a>
+                      </div>
+                    )}
+                    
+                    {selectedOrder.ups_label_url && (
+                      <a 
+                        href={selectedOrder.ups_label_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 text-sm text-blue-600 hover:underline"
+                      >
+                        View Shipping Label →
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <h3 className="font-semibold mb-2">🔄 Return Pickup</h3>
+                    <p className={`font-medium ${selectedOrder.return_date === today ? 'text-orange-600' : ''}`}>
+                      {selectedOrder.return_date === today ? '📍 TODAY - ' : ''}{formatDate(selectedOrder.return_date)}
+                    </p>
+                    <p className="text-gray-600">{formatWindow(selectedOrder.return_window)}</p>
+                    <p className="mt-2">{selectedOrder.return_address}</p>
+                    <p className="text-gray-600">{selectedOrder.return_city?.name}</p>
+                  </div>
+                )}
               </div>
 
               {/* Pricing breakdown */}
@@ -533,6 +689,30 @@ export default function AdminPage() {
                   <span className="text-gray-600">Subtotal</span>
                   <span>${(selectedOrder.subtotal / 100).toFixed(2)}</span>
                 </div>
+                {(selectedOrder.discount > 0 || selectedOrder.early_bird_discount > 0 || selectedOrder.promo_discount > 0) && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount</span>
+                    <span>-${((selectedOrder.discount || selectedOrder.early_bird_discount + selectedOrder.promo_discount) / 100).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-600">
+                    {selectedOrder.return_method === 'ship' ? 'Delivery Fee' : 'Delivery & Pickup'}
+                  </span>
+                  <span>${((selectedOrder.delivery_fee || 1999) / 100).toFixed(2)}</span>
+                </div>
+                {selectedOrder.ship_back_fee && selectedOrder.ship_back_fee > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">UPS Ship Back Fee</span>
+                    <span>${(selectedOrder.ship_back_fee / 100).toFixed(2)}</span>
+                  </div>
+                )}
+                {selectedOrder.rush_fee && selectedOrder.rush_fee > 0 && (
+                  <div className="flex justify-between text-amber-600">
+                    <span>Rush Fee</span>
+                    <span>${(selectedOrder.rush_fee / 100).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax</span>
                   <span>${(selectedOrder.tax / 100).toFixed(2)}</span>
