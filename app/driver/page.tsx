@@ -5,6 +5,31 @@ import { createClient } from '../../lib/supabase'
 import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
 
+// SMS sent via API route (twilio can't run client-side)
+async function sendDeliveredSMS(phone: string, name: string) {
+  try {
+    await fetch('/api/sms/delivered', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, name })
+    })
+  } catch (e) {
+    console.error('SMS error:', e)
+  }
+}
+
+async function sendPickedUpSMS(phone: string, name: string) {
+  try {
+    await fetch('/api/sms/picked-up', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, name })
+    })
+  } catch (e) {
+    console.error('SMS error:', e)
+  }
+}
+
 type OrderItem = {
   id: string
   quantity: number
@@ -515,6 +540,8 @@ export default function DriverPage() {
   }
 
   async function markDelivered(orderId: string) {
+    const order = orders.find(o => o.id === orderId)
+    
     const { error } = await supabase
       .from('orders')
       .update({ status: 'delivered' })
@@ -524,6 +551,11 @@ export default function DriverPage() {
       setOrders(prev => prev.map(o => 
         o.id === orderId ? { ...o, status: 'delivered' } : o
       ))
+      
+      // Send SMS notification
+      if (order?.customer_phone) {
+        sendDeliveredSMS(order.customer_phone, order.customer_name.split(' ')[0])
+      }
     }
   }
 
@@ -554,6 +586,11 @@ export default function DriverPage() {
       setOrders(prev => prev.map(o => 
         o.id === orderId ? { ...o, status: 'returned' } : o
       ))
+      
+      // Send SMS notification (thank you message)
+      if (order?.customer_phone) {
+        sendPickedUpSMS(order.customer_phone, order.customer_name.split(' ')[0])
+      }
     }
   }
 
