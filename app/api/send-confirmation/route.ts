@@ -20,7 +20,14 @@ export async function POST(request: NextRequest) {
       discount,
       deliveryFee,
       tax,
-      total
+      total,
+      // Ship back fields (optional)
+      isShipBack,
+      shipBackAddress,
+      shipBackCity,
+      shipBackState,
+      shipBackZip,
+      shipBackFee
     } = await request.json()
 
     const formatDate = (dateStr: string) => {
@@ -45,6 +52,27 @@ export async function POST(request: NextRequest) {
       `• ${item.quantity}x ${item.name} - $${(item.lineTotal / 100).toFixed(2)}`
     ).join('\n')
 
+    // Build return section based on ship-back or pickup
+    const returnSection = isShipBack ? `
+            <div class="section">
+              <div class="section-title">📦 UPS Ship Back</div>
+              <div class="highlight-box">
+                <strong>Return by: ${formatDate(returnDate)}</strong><br/>
+                <span style="color: #666;">Drop off at any UPS location near:<br/>${shipBackAddress}, ${shipBackCity}, ${shipBackState} ${shipBackZip}</span>
+                <p style="color: #0891b2; margin-top: 10px; font-size: 14px;">✓ Prepaid UPS label included with your delivery<br/>✓ Free poly bag included for shipping</p>
+              </div>
+            </div>
+    ` : `
+            <div class="section">
+              <div class="section-title">🔄 Return Pickup</div>
+              <div class="highlight-box">
+                <strong>${formatDate(returnDate)}</strong><br/>
+                ${formatWindow(returnWindow)}<br/>
+                <span style="color: #666;">${returnAddress}</span>
+              </div>
+            </div>
+    `
+
     const { data, error } = await resend.emails.send({
       from: 'ooloo <onboarding@resend.dev>',
       to: customerEmail,
@@ -66,6 +94,7 @@ export async function POST(request: NextRequest) {
             .total-row { font-size: 20px; font-weight: bold; padding: 15px 0; }
             .footer { text-align: center; padding: 20px 0; color: #666; font-size: 14px; }
             .highlight-box { background: #f0fdfa; border-radius: 8px; padding: 15px; margin: 10px 0; }
+            .btn { display: inline-block; background: #0891b2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500; }
           </style>
         </head>
         <body>
@@ -90,14 +119,7 @@ export async function POST(request: NextRequest) {
               </div>
             </div>
 
-            <div class="section">
-              <div class="section-title">🔄 Return Pickup</div>
-              <div class="highlight-box">
-                <strong>${formatDate(returnDate)}</strong><br/>
-                ${formatWindow(returnWindow)}<br/>
-                <span style="color: #666;">${returnAddress}</span>
-              </div>
-            </div>
+            ${returnSection}
 
             <div class="section">
               <div class="section-title">🧳 Your Items</div>
@@ -116,9 +138,15 @@ export async function POST(request: NextRequest) {
               </div>
               ` : ''}
               <div class="detail-row">
-                <span class="label">Delivery & Pickup</span>
+                <span class="label">${isShipBack ? 'Delivery Fee' : 'Delivery & Pickup'}</span>
                 <span class="value">$${(deliveryFee / 100).toFixed(2)}</span>
               </div>
+              ${isShipBack && shipBackFee ? `
+              <div class="detail-row">
+                <span class="label">UPS Ship Back Fee</span>
+                <span class="value">$${(shipBackFee / 100).toFixed(2)}</span>
+              </div>
+              ` : ''}
               <div class="detail-row">
                 <span class="label">Tax</span>
                 <span class="value">$${(tax / 100).toFixed(2)}</span>
@@ -130,18 +158,22 @@ export async function POST(request: NextRequest) {
             </div>
 
             <div class="section">
-  <div class="section-title">Track Your Order</div>
-  <p>Check your order status anytime:</p>
-  <p style="margin: 10px 0;">
-    <a href="https://ooloo.vercel.app/order" style="display: inline-block; background: #0891b2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500;">Track My Order</a>
-  </p>
-  <p style="color: #666; font-size: 14px;">Your Order ID: <strong>${orderId.slice(0, 8).toUpperCase()}</strong></p>
-</div>
+              <div class="section-title">Manage Your Order</div>
+              <p>Need to update your address or cancel your order? You can do it online:</p>
+              <p style="margin: 15px 0;">
+                <a href="https://ooloo.vercel.app/order" class="btn" style="color: white;">Manage Your Order</a>
+              </p>
+              <p style="color: #666; font-size: 14px;">Your Order ID: <strong>${orderId.slice(0, 8).toUpperCase()}</strong></p>
+              <p style="color: #666; font-size: 13px; margin-top: 10px;">
+                ✓ Edit delivery or return address up to 24 hours before<br/>
+                ✓ Cancel for a full refund up to 48 hours before delivery
+              </p>
+            </div>
 
-<div class="section">
-  <div class="section-title">Questions?</div>
-  <p>Just reply to this email and we'll help you out!</p>
-</div>
+            <div class="section">
+              <div class="section-title">Questions?</div>
+              <p>Just reply to this email and we'll help you out!</p>
+            </div>
 
             <div class="footer">
               <p>© 2025 ooloo. All rights reserved.</p>

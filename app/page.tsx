@@ -95,7 +95,7 @@ export default function Home() {
       <span className="text-white font-medium">ooloo</span>
     </div>
     <div className="flex gap-6 text-sm">
-      <a href="/order" className="hover:text-white transition">Track Order</a>
+      <a href="/order" className="hover:text-white transition">Manage Your Order</a>
       <a href="/book" className="hover:text-white transition">Book Now</a>
     </div>
     <p className="text-sm">© 2025 ooloo. All rights reserved.</p>
