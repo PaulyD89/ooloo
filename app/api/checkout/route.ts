@@ -53,7 +53,11 @@ export async function POST(request: NextRequest) {
       shipBackAddress,
       shipBackCity,
       shipBackState,
-      shipBackZip
+      shipBackZip,
+      // Referral fields
+      referralCodeUsed,
+      referralDiscount,
+      referralCreditApplied
     } = body
 
     // Server-side validation of Early Bird and Rush Fee
@@ -219,7 +223,10 @@ export async function POST(request: NextRequest) {
         ship_back_address: shipBackAddress || null,
         ship_back_city: shipBackCity || null,
         ship_back_state: shipBackState || null,
-        ship_back_zip: shipBackZip || null
+        ship_back_zip: shipBackZip || null,
+        // Referral fields
+        referral_code_used: referralCodeUsed || null,
+        referral_credit_applied: referralCreditApplied || 0
       })
       .select()
       .single()
@@ -227,6 +234,25 @@ export async function POST(request: NextRequest) {
     if (orderError) {
       console.error('Order creation error:', orderError)
       return NextResponse.json({ error: 'Failed to create order' }, { status: 500 })
+    }
+
+    // Handle referral credit deduction if credit was used
+    if (referralCreditApplied && referralCreditApplied > 0) {
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('id, referral_credit')
+        .eq('email', customerEmail.toLowerCase())
+        .single()
+
+      if (customer) {
+        await supabase
+          .from('customers')
+          .update({ 
+            referral_credit: Math.max(0, customer.referral_credit - referralCreditApplied),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', customer.id)
+      }
     }
 
     // Create order items (rentals)

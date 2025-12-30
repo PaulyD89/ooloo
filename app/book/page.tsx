@@ -244,6 +244,14 @@ export default function BookPage() {
   const [promoError, setPromoError] = useState('')
   const [promoLoading, setPromoLoading] = useState(false)
 
+  // Referral code state
+  const [referralCodeInput, setReferralCodeInput] = useState('')
+  const [appliedReferral, setAppliedReferral] = useState<{ code: string; discount: number } | null>(null)
+  const [referralError, setReferralError] = useState('')
+  const [referralLoading, setReferralLoading] = useState(false)
+  const [customerCredit, setCustomerCredit] = useState(0) // Available credit in cents
+  const [applyCredit, setApplyCredit] = useState(false)
+
   const [clientSecret, setClientSecret] = useState('')
   const [orderId, setOrderId] = useState('')
 
@@ -355,8 +363,13 @@ export default function BookPage() {
       : appliedPromo.discount_value
     : 0
 
+  // Referral discounts (new customer $10 off OR existing customer credit)
+  const REFERRAL_DISCOUNT = 1000 // $10 in cents
+  const referralDiscount = appliedReferral ? REFERRAL_DISCOUNT : 0
+  const creditApplied = applyCredit ? Math.min(customerCredit, rentalSubtotal - earlyBirdDiscount - promoDiscount) : 0
+
   // Total discount for display
-  const totalDiscount = earlyBirdDiscount + promoDiscount
+  const totalDiscount = earlyBirdDiscount + promoDiscount + referralDiscount + creditApplied
 
   // Rush fee
   const rushFee = isRushOrder ? RUSH_FEE : 0
@@ -458,6 +471,73 @@ export default function BookPage() {
     setPromoError('')
   }
 
+  // Check for existing customer credit when email is entered
+  const checkCustomerCredit = async (email: string) => {
+    if (!email) return
+    
+    const { data } = await supabase
+      .from('customers')
+      .select('referral_credit')
+      .eq('email', email.toLowerCase())
+      .single()
+    
+    if (data && data.referral_credit > 0) {
+      setCustomerCredit(data.referral_credit)
+      setApplyCredit(true) // Auto-apply credit
+    } else {
+      setCustomerCredit(0)
+      setApplyCredit(false)
+    }
+  }
+
+  // Apply referral code (for new customers)
+  const applyReferralCode = async () => {
+    if (!referralCodeInput.trim()) return
+    
+    // Can't use referral code if you have credit (you're already a customer)
+    if (customerCredit > 0) {
+      setReferralError('Referral codes are for new customers only')
+      return
+    }
+    
+    // Can't stack with promo codes
+    if (appliedPromo) {
+      setReferralError('Cannot combine referral code with promo code')
+      return
+    }
+    
+    setReferralLoading(true)
+    setReferralError('')
+    
+    const { data, error } = await supabase
+      .from('customers')
+      .select('referral_code, email')
+      .eq('referral_code', referralCodeInput.toUpperCase())
+      .single()
+    
+    if (error || !data) {
+      setReferralError('Invalid referral code')
+      setReferralLoading(false)
+      return
+    }
+    
+    // Can't use your own code
+    if (data.email.toLowerCase() === customerEmail.toLowerCase()) {
+      setReferralError('You cannot use your own referral code')
+      setReferralLoading(false)
+      return
+    }
+    
+    setAppliedReferral({ code: data.referral_code, discount: 1000 })
+    setReferralLoading(false)
+  }
+
+  const removeReferralCode = () => {
+    setAppliedReferral(null)
+    setReferralCodeInput('')
+    setReferralError('')
+  }
+
   // For ship-back, we don't need return address (already collected in Step 1)
   const isStep3Valid = customerName && customerEmail && customerPhone && 
     deliveryStreet && deliveryCityAddress && deliveryState && deliveryZip &&
@@ -524,7 +604,11 @@ export default function BookPage() {
         shipBackAddress: isShipBack ? shipBackStreet : null,
         shipBackCity: isShipBack ? shipBackCity : null,
         shipBackState: isShipBack ? shipBackState : null,
-        shipBackZip: isShipBack ? shipBackZip : null
+        shipBackZip: isShipBack ? shipBackZip : null,
+        // Referral fields
+        referralCodeUsed: appliedReferral?.code || null,
+        referralDiscount,
+        referralCreditApplied: creditApplied
       })
     })
 
@@ -871,6 +955,7 @@ export default function BookPage() {
                     type="email" 
                     value={customerEmail}
                     onChange={e => setCustomerEmail(e.target.value)}
+                    onBlur={e => checkCustomerCredit(e.target.value)}
                     className="w-full p-3 border rounded-lg" 
                     placeholder="john@example.com" 
                   />
@@ -1159,6 +1244,80 @@ export default function BookPage() {
                   <p className="text-red-500 text-sm mt-2">{promoError}</p>
                 )}
               </div>
+
+              {/* Referral Code / Credit Section */}
+              <div className="pt-4 border-t">
+                <h3 className="font-semibold mb-4">Referral Code</h3>
+                
+                {/* Show credit if customer has some */}
+                {customerCredit > 0 && (
+                  <div className="mb-4 p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-cyan-800">Welcome back!</span>
+                        <span className="text-cyan-600 ml-2">
+                          You have ${(customerCredit / 100).toFixed(2)} referral credit
+                        </span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={applyCredit}
+                          onChange={e => setApplyCredit(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300"
+                        />
+                        <span className="text-sm text-cyan-700">Apply credit</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Referral code input - only show if no credit (new customer) */}
+                {customerCredit === 0 && !appliedReferral && (
+                  <>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={referralCodeInput}
+                        onChange={e => setReferralCodeInput(e.target.value.toUpperCase())}
+                        className="flex-1 p-3 border rounded-lg"
+                        placeholder="Friend's referral code"
+                        disabled={!!appliedPromo}
+                      />
+                      <button 
+                        onClick={applyReferralCode}
+                        disabled={referralLoading || !referralCodeInput.trim() || !!appliedPromo}
+                        className="px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+                      >
+                        {referralLoading ? '...' : 'Apply'}
+                      </button>
+                    </div>
+                    {appliedPromo && (
+                      <p className="text-gray-500 text-sm mt-2">Remove promo code to use a referral code</p>
+                    )}
+                  </>
+                )}
+
+                {/* Applied referral code */}
+                {appliedReferral && (
+                  <div className="flex items-center justify-between p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
+                    <div>
+                      <span className="font-medium text-cyan-800">{appliedReferral.code}</span>
+                      <span className="text-cyan-600 ml-2">$10.00 off</span>
+                    </div>
+                    <button 
+                      onClick={removeReferralCode}
+                      className="text-cyan-600 hover:text-cyan-800"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+
+                {referralError && (
+                  <p className="text-red-500 text-sm mt-2">{referralError}</p>
+                )}
+              </div>
             </div>
 
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -1188,6 +1347,18 @@ export default function BookPage() {
                 <div className="flex justify-between mb-2 text-green-600">
                   <span>Promo Code ({appliedPromo?.code})</span>
                   <span>-${(promoDiscount / 100).toFixed(2)}</span>
+                </div>
+              )}
+              {referralDiscount > 0 && (
+                <div className="flex justify-between mb-2 text-cyan-600">
+                  <span>Referral Discount ({appliedReferral?.code})</span>
+                  <span>-${(referralDiscount / 100).toFixed(2)}</span>
+                </div>
+              )}
+              {creditApplied > 0 && (
+                <div className="flex justify-between mb-2 text-cyan-600">
+                  <span>Referral Credit Applied</span>
+                  <span>-${(creditApplied / 100).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between mb-2">

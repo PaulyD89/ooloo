@@ -57,6 +57,82 @@ export async function POST(request: NextRequest) {
         .update({ status: 'confirmed' })
         .eq('id', order.id)
 
+      // Handle referral program
+      try {
+        // Check if customer exists
+        const { data: existingCustomer } = await supabase
+          .from('customers')
+          .select('id, referral_code')
+          .eq('email', order.customer_email.toLowerCase())
+          .single()
+
+        if (!existingCustomer) {
+          // Create new customer with referral code
+          const generateCode = (name: string) => {
+            const base = name.split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8) || 'REF'
+            return `${base}10`
+          }
+
+          let referralCode = generateCode(order.customer_name)
+          
+          // Check if code exists and increment if needed
+          let counter = 0
+          while (true) {
+            const { data: existing } = await supabase
+              .from('customers')
+              .select('id')
+              .eq('referral_code', referralCode)
+              .single()
+            
+            if (!existing) break
+            counter++
+            referralCode = `${generateCode(order.customer_name).slice(0, -2)}${10 + counter}`
+          }
+
+          await supabase
+            .from('customers')
+            .insert({
+              email: order.customer_email.toLowerCase(),
+              name: order.customer_name,
+              referral_code: referralCode,
+              referred_by_code: order.referral_code_used || null
+            })
+          
+          console.log('Created customer with referral code:', referralCode)
+        }
+
+        // Credit the referrer if a referral code was used
+        if (order.referral_code_used && !order.referral_credited) {
+          const { data: referrer } = await supabase
+            .from('customers')
+            .select('id, referral_credit')
+            .eq('referral_code', order.referral_code_used)
+            .single()
+
+          if (referrer) {
+            // Credit $10 to referrer
+            await supabase
+              .from('customers')
+              .update({ 
+                referral_credit: referrer.referral_credit + 1000,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', referrer.id)
+
+            // Mark order as credited
+            await supabase
+              .from('orders')
+              .update({ referral_credited: true })
+              .eq('id', order.id)
+
+            console.log('Credited referrer:', order.referral_code_used)
+          }
+        }
+      } catch (referralError) {
+        console.error('Referral handling error:', referralError)
+        // Don't fail the webhook for referral errors
+      }
+
       // Get order items
       const { data: orderItems } = await supabase
         .from('order_items')

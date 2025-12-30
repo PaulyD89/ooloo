@@ -170,6 +170,17 @@ export async function POST(request: NextRequest) {
               </p>
             </div>
 
+            <div class="section" style="background: #f0fdfa; margin: 0 -20px; padding: 20px;">
+              <div class="section-title">🎁 Give $10, Get $10</div>
+              <p>Share your referral code with friends:</p>
+              <div style="background: white; border: 2px dashed #0891b2; border-radius: 8px; padding: 15px; text-align: center; margin: 15px 0;">
+                <span style="font-size: 24px; font-weight: bold; color: #0891b2; letter-spacing: 2px;">Check your next email for your code!</span>
+              </div>
+              <p style="color: #666; font-size: 13px;">
+                When they book, they get $10 off. When they complete their rental, you get $10 credit!
+              </p>
+            </div>
+
             <div class="section">
               <div class="section-title">Questions?</div>
               <p>Just reply to this email and we'll help you out!</p>
