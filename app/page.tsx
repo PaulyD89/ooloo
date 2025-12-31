@@ -89,16 +89,54 @@ export default function Home() {
 
       {/* Footer */}
 <footer className="px-6 py-12 bg-gray-900 text-gray-400">
-  <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-    <div className="flex items-center gap-3">
-      <img src="/oolooicon.png" alt="ooloo" className="h-10" />
-      <span className="text-white font-medium">ooloo</span>
+  <div className="max-w-5xl mx-auto">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
+      {/* Logo */}
+      <div className="col-span-2 md:col-span-1">
+        <div className="flex items-center gap-3 mb-4">
+          <img src="/oolooicon.png" alt="ooloo" className="h-10" />
+          <span className="text-white font-medium">ooloo</span>
+        </div>
+        <p className="text-sm">Rent the luggage. Own the trip.</p>
+      </div>
+      
+      {/* Company */}
+      <div>
+        <h4 className="text-white font-medium mb-4">Company</h4>
+        <ul className="space-y-2 text-sm">
+          <li><a href="/about" className="hover:text-white transition">About Us</a></li>
+          <li><a href="/#how-it-works" className="hover:text-white transition">How It Works</a></li>
+          <li><a href="/cities" className="hover:text-white transition">Cities</a></li>
+        </ul>
+      </div>
+      
+      {/* Support */}
+      <div>
+        <h4 className="text-white font-medium mb-4">Support</h4>
+        <ul className="space-y-2 text-sm">
+          <li><a href="/faq" className="hover:text-white transition">FAQ</a></li>
+          <li><a href="/contact" className="hover:text-white transition">Contact Us</a></li>
+          <li><a href="/order" className="hover:text-white transition">Manage Your Order</a></li>
+        </ul>
+      </div>
+      
+      {/* Legal */}
+      <div>
+        <h4 className="text-white font-medium mb-4">Legal</h4>
+        <ul className="space-y-2 text-sm">
+          <li><a href="/terms" className="hover:text-white transition">Terms of Service</a></li>
+          <li><a href="/privacy" className="hover:text-white transition">Privacy Policy</a></li>
+        </ul>
+      </div>
     </div>
-    <div className="flex gap-6 text-sm">
-      <a href="/order" className="hover:text-white transition">Manage Your Order</a>
-      <a href="/book" className="hover:text-white transition">Book Now</a>
+    
+    <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+      <p className="text-sm">© 2025 ooloo. All rights reserved.</p>
+      <div className="flex gap-6">
+        <a href="https://instagram.com/ooloo" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Instagram</a>
+        <a href="https://twitter.com/ooloo" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Twitter</a>
+      </div>
     </div>
-    <p className="text-sm">© 2025 ooloo. All rights reserved.</p>
   </div>
 </footer>
     </main>
