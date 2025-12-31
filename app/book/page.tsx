@@ -677,9 +677,10 @@ export default function BookPage() {
                       setReturnCitySelect(e.target.value)
                     }
                   }}
-                  className="w-full p-3 border rounded-lg"
+                  disabled={!deliveryCitySelect}
+                  className={`w-full p-3 border rounded-lg ${!deliveryCitySelect ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
                 >
-                  <option value="">Select a city</option>
+                  <option value="">{deliveryCitySelect ? 'Select a city' : 'Select delivery city first'}</option>
                   {cities.map(city => (
                     <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
