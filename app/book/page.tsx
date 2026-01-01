@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '../../lib/supabase'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
@@ -205,6 +206,7 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
 }
 
 export default function BookPage() {
+  const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
   const [cities, setCities] = useState<City[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -275,6 +277,30 @@ export default function BookPage() {
     
     loadData()
   }, [])
+
+  // Pre-select delivery city from URL parameter
+  useEffect(() => {
+    const citySlug = searchParams.get('city')
+    if (citySlug && cities.length > 0) {
+      // Map slug to city name for matching
+      const slugToName: Record<string, string> = {
+        'los-angeles': 'Los Angeles',
+        'new-york': 'New York',
+        'san-francisco': 'San Francisco',
+        'chicago': 'Chicago',
+        'atlanta': 'Atlanta',
+        'dallas-fort-worth': 'Dallas-Fort Worth',
+        'denver': 'Denver',
+      }
+      const cityName = slugToName[citySlug]
+      if (cityName) {
+        const matchedCity = cities.find(c => c.name === cityName)
+        if (matchedCity) {
+          setDeliveryCitySelect(matchedCity.id)
+        }
+      }
+    }
+  }, [searchParams, cities])
 
   useEffect(() => {
     if (sameAsDelivery) {

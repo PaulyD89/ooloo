@@ -2,13 +2,13 @@ import Link from 'next/link'
 
 export default function CitiesPage() {
   const cities = [
-    { name: 'Los Angeles', state: 'CA', available: true },
-    { name: 'New York', state: 'NY', available: true },
-    { name: 'San Francisco', state: 'CA', available: true },
-    { name: 'Chicago', state: 'IL', available: true },
-    { name: 'Atlanta', state: 'GA', available: true },
-    { name: 'Dallas-Fort Worth', state: 'TX', available: true },
-    { name: 'Denver', state: 'CO', available: true },
+    { name: 'Los Angeles', state: 'CA', slug: 'los-angeles' },
+    { name: 'New York', state: 'NY', slug: 'new-york' },
+    { name: 'San Francisco', state: 'CA', slug: 'san-francisco' },
+    { name: 'Chicago', state: 'IL', slug: 'chicago' },
+    { name: 'Atlanta', state: 'GA', slug: 'atlanta' },
+    { name: 'Dallas-Fort Worth', state: 'TX', slug: 'dallas-fort-worth' },
+    { name: 'Denver', state: 'CO', slug: 'denver' },
   ]
 
   const comingSoon = [
@@ -51,7 +51,7 @@ export default function CitiesPage() {
             {cities.map((city) => (
               <Link
                 key={city.name}
-                href="/book"
+                href={`/book?city=${city.slug}`}
                 className="bg-white p-6 rounded-xl border hover:border-cyan-300 hover:shadow-md transition flex justify-between items-center"
               >
                 <div>
