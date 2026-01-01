@@ -317,6 +317,26 @@ function BookPageContent() {
     }
   }, [step, deliveryCitySelect, deliveryDate, returnDate])
 
+  // Format phone number as user types
+  const formatPhoneNumber = (value: string) => {
+    // Remove all non-digits
+    const digits = value.replace(/\D/g, '')
+    
+    // Limit to 10 digits
+    const trimmed = digits.slice(0, 10)
+    
+    // Format based on length
+    if (trimmed.length === 0) return ''
+    if (trimmed.length <= 3) return `(${trimmed}`
+    if (trimmed.length <= 6) return `(${trimmed.slice(0, 3)}) ${trimmed.slice(3)}`
+    return `(${trimmed.slice(0, 3)}) ${trimmed.slice(3, 6)}-${trimmed.slice(6)}`
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value)
+    setCustomerPhone(formatted)
+  }
+
   const checkAvailability = async () => {
     if (!deliveryCitySelect || !deliveryDate || !returnDate) return
     
@@ -992,7 +1012,7 @@ function BookPageContent() {
                   <input 
                     type="tel" 
                     value={customerPhone}
-                    onChange={e => setCustomerPhone(e.target.value)}
+                    onChange={handlePhoneChange}
                     className="w-full p-3 border rounded-lg" 
                     placeholder="(555) 123-4567" 
                   />
