@@ -43,6 +43,7 @@ type Order = {
   ship_back_zip: string | null
   ups_tracking_number: string | null
   ups_label_url: string | null
+  admin_notes: string | null
   delivery_city: { name: string } | null
   return_city: { name: string } | null
   order_items?: OrderItem[]
@@ -93,6 +94,14 @@ export default function AdminPage() {
   const [loadingItems, setLoadingItems] = useState(false)
   const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([])
   const [alertsLoading, setAlertsLoading] = useState(true)
+  
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [saving, setSaving] = useState(false)
   
   const router = useRouter()
   const supabase = createClient()
@@ -254,6 +263,129 @@ export default function AdminPage() {
     }
   }
 
+  function startEditing() {
+    if (!selectedOrder) return
+    setEditName(selectedOrder.customer_name)
+    setEditEmail(selectedOrder.customer_email)
+    setEditPhone(selectedOrder.customer_phone)
+    setEditNotes(selectedOrder.admin_notes || '')
+    setIsEditing(true)
+  }
+
+  function cancelEditing() {
+    setIsEditing(false)
+    setEditName('')
+    setEditEmail('')
+    setEditPhone('')
+    setEditNotes('')
+  }
+
+  async function saveChanges() {
+    if (!selectedOrder) return
+    setSaving(true)
+
+    const updates: Record<string, string | null> = {
+      customer_name: editName,
+      customer_email: editEmail,
+      customer_phone: editPhone,
+      admin_notes: editNotes || null
+    }
+
+    const { error } = await supabase
+      .from('orders')
+      .update(updates)
+      .eq('id', selectedOrder.id)
+
+    if (!error) {
+      const updatedOrder = { ...selectedOrder, ...updates }
+      setOrders(prev => prev.map(o => 
+        o.id === selectedOrder.id ? updatedOrder : o
+      ))
+      setSelectedOrder(updatedOrder)
+      setIsEditing(false)
+    }
+    setSaving(false)
+  }
+
+  function exportOrdersToCSV() {
+    const headers = [
+      'Order ID',
+      'Status',
+      'Customer Name',
+      'Email',
+      'Phone',
+      'Delivery Date',
+      'Delivery Window',
+      'Delivery City',
+      'Delivery Address',
+      'Return Date',
+      'Return Window',
+      'Return City',
+      'Return Method',
+      'Subtotal',
+      'Discount',
+      'Rush Fee',
+      'Delivery Fee',
+      'Ship Back Fee',
+      'Tax',
+      'Total',
+      'Created At',
+      'Admin Notes'
+    ]
+
+    const rows = filteredOrders.map(order => [
+      order.id,
+      order.status,
+      order.customer_name,
+      order.customer_email,
+      order.customer_phone,
+      order.delivery_date,
+      order.delivery_window,
+      order.delivery_city?.name || '',
+      order.delivery_address,
+      order.return_date,
+      order.return_window || '',
+      order.return_city?.name || (order.return_method === 'ship' ? 'UPS Ship Back' : ''),
+      order.return_method || 'pickup',
+      (order.subtotal / 100).toFixed(2),
+      ((order.discount + order.early_bird_discount + order.promo_discount) / 100).toFixed(2),
+      ((order.rush_fee || 0) / 100).toFixed(2),
+      ((order.delivery_fee || 0) / 100).toFixed(2),
+      ((order.ship_back_fee || 0) / 100).toFixed(2),
+      (order.tax / 100).toFixed(2),
+      (order.total / 100).toFixed(2),
+      new Date(order.created_at).toLocaleString(),
+      order.admin_notes || ''
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `ooloo-orders-${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+  }
+
+  // Revenue calculations
+  const calculateRevenue = (orderList: Order[]) => {
+    return orderList
+      .filter(o => !['cancelled', 'pending'].includes(o.status))
+      .reduce((sum, o) => sum + o.total, 0)
+  }
+
+  const todayDate = new Date()
+  const startOfWeek = new Date(todayDate)
+  startOfWeek.setDate(todayDate.getDate() - todayDate.getDay())
+  const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
+
+  const todayRevenue = calculateRevenue(orders.filter(o => o.created_at.startsWith(today)))
+  const weekRevenue = calculateRevenue(orders.filter(o => new Date(o.created_at) >= startOfWeek))
+  const monthRevenue = calculateRevenue(orders.filter(o => new Date(o.created_at) >= startOfMonth))
+
   // Filter orders
   const filteredOrders = orders.filter(order => {
     // Status filter
@@ -381,6 +513,22 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-6xl mx-auto p-6">
+        {/* Revenue Summary */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
+            <p className="text-sm text-green-700">Today's Revenue</p>
+            <p className="text-2xl font-bold text-green-800">${(todayRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-700">This Week</p>
+            <p className="text-2xl font-bold text-blue-800">${(weekRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg border border-purple-200">
+            <p className="text-sm text-purple-700">This Month</p>
+            <p className="text-2xl font-bold text-purple-800">${(monthRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          </div>
+        </div>
+
         {/* Today's Summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <button
@@ -470,6 +618,12 @@ export default function AdminPage() {
                 className="p-3 border rounded-lg"
               />
             )}
+            <button
+              onClick={exportOrdersToCSV}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              <span>📥</span> Export CSV
+            </button>
           </div>
         </div>
 
@@ -566,6 +720,11 @@ export default function AdminPage() {
                 onClick={() => {
                   setSelectedOrder(null)
                   setOrderItems([])
+                  setIsEditing(false)
+                  setEditName('')
+                  setEditEmail('')
+                  setEditPhone('')
+                  setEditNotes('')
                 }}
                 className="text-gray-400 hover:text-gray-600 text-2xl"
               >
@@ -592,10 +751,94 @@ export default function AdminPage() {
 
               {/* Customer info */}
               <div>
-                <h3 className="font-semibold mb-2">Customer</h3>
-                <p>{selectedOrder.customer_name}</p>
-                <p className="text-gray-600">{selectedOrder.customer_email}</p>
-                <p className="text-gray-600">{selectedOrder.customer_phone}</p>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold">Customer</h3>
+                  {!isEditing ? (
+                    <button
+                      onClick={startEditing}
+                      className="text-sm text-cyan-600 hover:underline"
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={cancelEditing}
+                        className="text-sm text-gray-500 hover:underline"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveChanges}
+                        disabled={saving}
+                        className="text-sm text-cyan-600 hover:underline disabled:opacity-50"
+                      >
+                        {saving ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Name</label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        className="w-full p-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={e => setEditEmail(e.target.value)}
+                        className="w-full p-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        value={editPhone}
+                        onChange={e => setEditPhone(e.target.value)}
+                        className="w-full p-2 border rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p>{selectedOrder.customer_name}</p>
+                    <p className="text-gray-600">{selectedOrder.customer_email}</p>
+                    <p className="text-gray-600">{selectedOrder.customer_phone}</p>
+                  </>
+                )}
+              </div>
+
+              {/* Admin Notes */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold">Admin Notes</h3>
+                </div>
+                {isEditing ? (
+                  <textarea
+                    value={editNotes}
+                    onChange={e => setEditNotes(e.target.value)}
+                    placeholder="Add internal notes about this order..."
+                    className="w-full p-3 border rounded-lg text-sm h-24 resize-none"
+                  />
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 min-h-[60px]">
+                    {selectedOrder.admin_notes ? (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedOrder.admin_notes}</p>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">No notes. Click Edit to add.</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Order Items */}
