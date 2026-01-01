@@ -420,10 +420,27 @@ export default function DriverPage() {
 
     setRouteLoading(true)
 
-    const geocoder = new google.maps.Geocoder()
-    const geocodedStops: RouteStop[] = []
+    // Group stops by time window
+    const windowOrder = ['morning', 'afternoon', 'evening']
+    const stopsByWindow: Record<string, RouteStop[]> = {
+      morning: [],
+      afternoon: [],
+      evening: []
+    }
+    
+    stops.forEach(stop => {
+      const window = stop.window || 'morning'
+      if (stopsByWindow[window]) {
+        stopsByWindow[window].push(stop)
+      } else {
+        stopsByWindow['morning'].push(stop)
+      }
+    })
 
-    for (const stop of stops) {
+    const geocoder = new google.maps.Geocoder()
+    
+    // Geocode all stops first
+    const geocodeStop = async (stop: RouteStop): Promise<RouteStop> => {
       try {
         const result = await new Promise<google.maps.GeocoderResult[]>((resolve, reject) => {
           geocoder.geocode({ address: stop.address }, (results, status) => {
@@ -436,28 +453,102 @@ export default function DriverPage() {
         })
 
         if (result[0]) {
-          geocodedStops.push({
+          return {
             ...stop,
             position: {
               lat: result[0].geometry.location.lat(),
               lng: result[0].geometry.location.lng()
             }
-          })
+          }
         }
       } catch (error) {
         console.error('Geocoding error for:', stop.address, error)
-        geocodedStops.push(stop)
+      }
+      return stop
+    }
+
+    // Geocode all stops
+    for (const window of windowOrder) {
+      const windowStops = stopsByWindow[window]
+      for (let i = 0; i < windowStops.length; i++) {
+        windowStops[i] = await geocodeStop(windowStops[i])
       }
     }
 
-    setRouteStops(geocodedStops)
+    // Optimize route within each time window using nearest neighbor algorithm
+    const optimizeWindowStops = (windowStops: RouteStop[], startPosition?: google.maps.LatLngLiteral): RouteStop[] => {
+      if (windowStops.length <= 1) return windowStops
+      
+      const stopsWithPos = windowStops.filter(s => s.position)
+      const stopsWithoutPos = windowStops.filter(s => !s.position)
+      
+      if (stopsWithPos.length <= 1) return [...stopsWithPos, ...stopsWithoutPos]
+      
+      const optimized: RouteStop[] = []
+      const remaining = [...stopsWithPos]
+      
+      // Start from driver location or first stop
+      let currentPos = startPosition || remaining[0].position!
+      
+      while (remaining.length > 0) {
+        // Find nearest stop
+        let nearestIdx = 0
+        let nearestDist = Infinity
+        
+        for (let i = 0; i < remaining.length; i++) {
+          if (!remaining[i].position) continue
+          const dist = Math.sqrt(
+            Math.pow(remaining[i].position!.lat - currentPos.lat, 2) +
+            Math.pow(remaining[i].position!.lng - currentPos.lng, 2)
+          )
+          if (dist < nearestDist) {
+            nearestDist = dist
+            nearestIdx = i
+          }
+        }
+        
+        const nearest = remaining.splice(nearestIdx, 1)[0]
+        optimized.push(nearest)
+        currentPos = nearest.position!
+      }
+      
+      return [...optimized, ...stopsWithoutPos]
+    }
 
-    geocodedStops.forEach((stop, index) => {
+    // Build final ordered route: morning (optimized) → afternoon (optimized) → evening (optimized)
+    let lastPosition = driverLocation || undefined
+    const finalOrderedStops: RouteStop[] = []
+    
+    for (const window of windowOrder) {
+      const windowStops = stopsByWindow[window]
+      if (windowStops.length > 0) {
+        const optimizedWindow = optimizeWindowStops(windowStops, lastPosition)
+        finalOrderedStops.push(...optimizedWindow)
+        // Update last position for next window's optimization
+        const lastStop = optimizedWindow[optimizedWindow.length - 1]
+        if (lastStop?.position) {
+          lastPosition = lastStop.position
+        }
+      }
+    }
+
+    setRouteStops(finalOrderedStops)
+
+    // Add markers for the ordered stops
+    finalOrderedStops.forEach((stop, index) => {
       if (!stop.position || !mapInstanceRef.current) return
 
       const isCompleted = stop.type === 'delivery' 
         ? ['delivered', 'out_for_pickup', 'returned'].includes(stop.order.status)
         : stop.order.status === 'returned'
+
+      // Color code by window
+      const windowColors: Record<string, string> = {
+        morning: '#22c55e',    // green
+        afternoon: '#f59e0b',  // amber
+        evening: '#8b5cf6'     // purple
+      }
+      const windowColor = windowColors[stop.window] || '#0891b2'
 
       const marker = new google.maps.Marker({
         position: stop.position,
@@ -470,10 +561,10 @@ export default function DriverPage() {
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 18,
-          fillColor: isCompleted ? '#9ca3af' : (stop.type === 'delivery' ? '#0891b2' : '#f97316'),
+          fillColor: isCompleted ? '#9ca3af' : windowColor,
           fillOpacity: 1,
-          strokeColor: 'white',
-          strokeWeight: 2
+          strokeColor: stop.type === 'pickup' ? '#f97316' : 'white',
+          strokeWeight: stop.type === 'pickup' ? 3 : 2
         }
       })
 
@@ -497,7 +588,8 @@ export default function DriverPage() {
       markersRef.current.push(marker)
     })
 
-    const stopsWithPositions = geocodedStops.filter(s => s.position)
+    // Draw route using the ordered stops (no optimization - we already ordered them)
+    const stopsWithPositions = finalOrderedStops.filter(s => s.position)
     
     if (stopsWithPositions.length >= 2) {
       const directionsService = new google.maps.DirectionsService()
@@ -506,6 +598,7 @@ export default function DriverPage() {
       const origin = driverLocation || stopsWithPositions[0].position!
       const destination = stopsWithPositions[stopsWithPositions.length - 1].position!
       
+      // Don't use optimizeWaypoints - we've already ordered them by window + efficiency
       const waypoints = driverLocation 
         ? stopsWithPositions.map(stop => ({
             location: stop.position!,
@@ -521,7 +614,7 @@ export default function DriverPage() {
           origin,
           destination,
           waypoints,
-          optimizeWaypoints: true,
+          optimizeWaypoints: false, // We already ordered by window + efficiency
           travelMode: google.maps.TravelMode.DRIVING
         })
 
@@ -990,16 +1083,20 @@ export default function DriverPage() {
             <div className="bg-white border-t max-h-[40vh] overflow-y-auto">
               <div className="p-4 border-b bg-gray-50">
                 <h3 className="font-semibold">
-                  {routeLoading ? 'Calculating route...' : `Optimized Route (${routeStops.length} stops)`}
+                  {routeLoading ? 'Calculating route...' : `Route (${routeStops.length} stops)`}
                 </h3>
                 <p className="text-sm text-gray-500">
-                  <span className="inline-block w-3 h-3 bg-cyan-500 rounded-full mr-1"></span> Delivery
-                  <span className="inline-block w-3 h-3 bg-orange-500 rounded-full ml-3 mr-1"></span> Pickup
+                  <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> Morning
+                  <span className="inline-block w-3 h-3 bg-amber-500 rounded-full ml-3 mr-1"></span> Afternoon
+                  <span className="inline-block w-3 h-3 bg-purple-500 rounded-full ml-3 mr-1"></span> Evening
                   {trackingEnabled && (
                     <>
                       <span className="inline-block w-3 h-3 bg-blue-500 rounded-full ml-3 mr-1"></span> You
                     </>
                   )}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Orange border = pickup
                 </p>
               </div>
               
@@ -1012,6 +1109,13 @@ export default function DriverPage() {
                       ? ['delivered', 'out_for_pickup', 'returned'].includes(stop.order.status)
                       : stop.order.status === 'returned'
 
+                    const windowColors: Record<string, string> = {
+                      morning: 'bg-green-500',
+                      afternoon: 'bg-amber-500',
+                      evening: 'bg-purple-500'
+                    }
+                    const windowColorClass = windowColors[stop.window] || 'bg-cyan-500'
+
                     return (
                       <div 
                         key={`${stop.order.id}-${stop.type}`} 
@@ -1021,10 +1125,8 @@ export default function DriverPage() {
                           className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
                             isCompleted 
                               ? 'bg-gray-400' 
-                              : stop.type === 'delivery' 
-                                ? 'bg-cyan-500' 
-                                : 'bg-orange-500'
-                          }`}
+                              : windowColorClass
+                          } ${stop.type === 'pickup' && !isCompleted ? 'ring-2 ring-orange-500' : ''}`}
                         >
                           {index + 1}
                         </div>
