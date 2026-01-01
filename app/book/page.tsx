@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '../../lib/supabase'
 import { loadStripe } from '@stripe/stripe-js'
@@ -205,7 +205,7 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
   )
 }
 
-export default function BookPage() {
+function BookPageContent() {
   const searchParams = useSearchParams()
   const [step, setStep] = useState(1)
   const [cities, setCities] = useState<City[]>([])
@@ -1490,5 +1490,13 @@ export default function BookPage() {
         </div>
       )}
     </main>
+  )
+}
+
+export default function BookPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white flex items-center justify-center">Loading...</div>}>
+      <BookPageContent />
+    </Suspense>
   )
 }
