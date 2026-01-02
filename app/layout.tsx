@@ -16,6 +16,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ooloo - Rent the Luggage, Own the Trip",
   description: "Rent premium luggage delivered to your door. No storage, no hassle. Available in Los Angeles, New York, San Francisco, Chicago, Atlanta, Dallas, and Denver.",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/apple-touch-icon.png",
+  },
   openGraph: {
     title: "ooloo - Rent the Luggage, Own the Trip",
     description: "Rent premium luggage delivered to your door. No storage, no hassle.",
