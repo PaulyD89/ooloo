@@ -940,14 +940,14 @@ export default function DriverPage() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full">
+      <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full overflow-hidden">
         {/* Date Selection */}
         <div className="bg-white p-4 border-b">
           <input
             type="date"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)}
-            className="w-full p-3 border rounded-lg"
+            className="w-full p-3 border rounded-lg box-border"
           />
         </div>
 

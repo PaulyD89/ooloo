@@ -241,6 +241,15 @@ function BookPageContent() {
   const [returnWindow, setReturnWindow] = useState('morning')
   const [sameAsDelivery, setSameAsDelivery] = useState(false)
 
+  // Window capacity limits (combined deliveries + pickups per window)
+  const WINDOW_CAPACITY: Record<string, number> = {
+    morning: 5,
+    afternoon: 8,
+    evening: 5
+  }
+  const [deliveryWindowCapacity, setDeliveryWindowCapacity] = useState<Record<string, number>>({})
+  const [returnWindowCapacity, setReturnWindowCapacity] = useState<Record<string, number>>({})
+
   const [promoCodeInput, setPromoCodeInput] = useState('')
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null)
   const [promoError, setPromoError] = useState('')
@@ -316,6 +325,65 @@ function BookPageContent() {
       checkAvailability()
     }
   }, [step, deliveryCitySelect, deliveryDate, returnDate])
+
+  // Check window capacity when city/dates change
+  useEffect(() => {
+    if (deliveryCitySelect && deliveryDate) {
+      checkWindowCapacity(deliveryCitySelect, deliveryDate, 'delivery')
+    }
+  }, [deliveryCitySelect, deliveryDate])
+
+  useEffect(() => {
+    if (returnCitySelect && returnDate && !isShipBack) {
+      checkWindowCapacity(returnCitySelect, returnDate, 'return')
+    }
+  }, [returnCitySelect, returnDate, isShipBack])
+
+  async function checkWindowCapacity(cityId: string, date: string, type: 'delivery' | 'return') {
+    const windows = ['morning', 'afternoon', 'evening']
+    const counts: Record<string, number> = {}
+    
+    for (const window of windows) {
+      // Count deliveries for this window
+      const { count: deliveryCount } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('delivery_city_id', cityId)
+        .eq('delivery_date', date)
+        .eq('delivery_window', window)
+        .neq('status', 'cancelled')
+      
+      // Count pickups for this window
+      const { count: pickupCount } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('return_city_id', cityId)
+        .eq('return_date', date)
+        .eq('return_window', window)
+        .neq('status', 'cancelled')
+        .neq('return_method', 'ship')
+      
+      counts[window] = (deliveryCount || 0) + (pickupCount || 0)
+    }
+    
+    if (type === 'delivery') {
+      setDeliveryWindowCapacity(counts)
+      // Auto-select first available window if current is full
+      const currentWindow = deliveryWindow
+      if (counts[currentWindow] >= WINDOW_CAPACITY[currentWindow]) {
+        const available = windows.find(w => counts[w] < WINDOW_CAPACITY[w])
+        if (available) setDeliveryWindow(available)
+      }
+    } else {
+      setReturnWindowCapacity(counts)
+      // Auto-select first available window if current is full
+      const currentWindow = returnWindow
+      if (counts[currentWindow] >= WINDOW_CAPACITY[currentWindow]) {
+        const available = windows.find(w => counts[w] < WINDOW_CAPACITY[w])
+        if (available) setReturnWindow(available)
+      }
+    }
+  }
 
   // Format phone number as user types
   const formatPhoneNumber = (value: string) => {
@@ -1073,10 +1141,20 @@ function BookPageContent() {
                       onChange={e => setDeliveryWindow(e.target.value)}
                       className="w-full p-3 border rounded-lg"
                     >
-                      <option value="morning">Morning (9am - 12pm)</option>
-                      <option value="afternoon">Afternoon (12pm - 5pm)</option>
-                      <option value="evening">Evening (5pm - 8pm)</option>
+                      {(deliveryWindowCapacity['morning'] || 0) < WINDOW_CAPACITY['morning'] && (
+                        <option value="morning">Morning (9am - 12pm)</option>
+                      )}
+                      {(deliveryWindowCapacity['afternoon'] || 0) < WINDOW_CAPACITY['afternoon'] && (
+                        <option value="afternoon">Afternoon (12pm - 5pm)</option>
+                      )}
+                      {(deliveryWindowCapacity['evening'] || 0) < WINDOW_CAPACITY['evening'] && (
+                        <option value="evening">Evening (5pm - 8pm)</option>
+                      )}
                     </select>
+                    {Object.keys(deliveryWindowCapacity).length > 0 && 
+                     Object.values(deliveryWindowCapacity).every((count, i) => count >= Object.values(WINDOW_CAPACITY)[i]) && (
+                      <p className="text-red-500 text-sm mt-1">No delivery windows available for this date</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1160,10 +1238,20 @@ function BookPageContent() {
                       onChange={e => setReturnWindow(e.target.value)}
                       className="w-full p-3 border rounded-lg"
                     >
-                      <option value="morning">Morning (9am - 12pm)</option>
-                      <option value="afternoon">Afternoon (12pm - 5pm)</option>
-                      <option value="evening">Evening (5pm - 8pm)</option>
+                      {(returnWindowCapacity['morning'] || 0) < WINDOW_CAPACITY['morning'] && (
+                        <option value="morning">Morning (9am - 12pm)</option>
+                      )}
+                      {(returnWindowCapacity['afternoon'] || 0) < WINDOW_CAPACITY['afternoon'] && (
+                        <option value="afternoon">Afternoon (12pm - 5pm)</option>
+                      )}
+                      {(returnWindowCapacity['evening'] || 0) < WINDOW_CAPACITY['evening'] && (
+                        <option value="evening">Evening (5pm - 8pm)</option>
+                      )}
                     </select>
+                    {Object.keys(returnWindowCapacity).length > 0 && 
+                     Object.values(returnWindowCapacity).every((count, i) => count >= Object.values(WINDOW_CAPACITY)[i]) && (
+                      <p className="text-red-500 text-sm mt-1">No return windows available for this date</p>
+                    )}
                   </div>
                 </div>
               </div>
