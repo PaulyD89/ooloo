@@ -88,6 +88,12 @@ export default function DriverPage() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPulling, setIsPulling] = useState(false)
+  const pullStartY = useRef(0)
+  const listContainerRef = useRef<HTMLDivElement>(null)
+  
   // Geolocation state
   const [driverLocation, setDriverLocation] = useState<google.maps.LatLngLiteral | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -652,6 +658,15 @@ export default function DriverPage() {
     }
   }
 
+  async function confirmAndMarkDelivered(orderId: string) {
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+    
+    if (window.confirm(`Mark delivered to ${order.customer_name}?`)) {
+      await markDelivered(orderId)
+    }
+  }
+
   async function markPickedUp(orderId: string) {
     const order = orders.find(o => o.id === orderId)
     
@@ -687,10 +702,52 @@ export default function DriverPage() {
     }
   }
 
+  async function confirmAndMarkPickedUp(orderId: string) {
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+    
+    if (window.confirm(`Mark picked up from ${order.customer_name}?`)) {
+      await markPickedUp(orderId)
+    }
+  }
+
   async function handleLogout() {
     stopLocationTracking()
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  // Pull-to-refresh handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const container = listContainerRef.current
+    if (!container || container.scrollTop > 0) return
+    
+    pullStartY.current = e.touches[0].clientY
+    setIsPulling(true)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPulling) return
+    const container = listContainerRef.current
+    if (!container || container.scrollTop > 0) {
+      setIsPulling(false)
+      setPullDistance(0)
+      return
+    }
+    
+    const currentY = e.touches[0].clientY
+    const distance = Math.max(0, (currentY - pullStartY.current) * 0.5)
+    setPullDistance(Math.min(distance, 80))
+  }
+
+  const handleTouchEnd = async () => {
+    if (pullDistance > 60) {
+      setRefreshing(true)
+      await loadOrders()
+      setRefreshing(false)
+    }
+    setIsPulling(false)
+    setPullDistance(0)
   }
 
   const formatWindow = (window: string | null) => {
@@ -828,24 +885,45 @@ export default function DriverPage() {
           </div>
         ) : activeTab === 'list' ? (
           /* List View */
-          <div className="flex-1 overflow-y-auto p-4">
-            {/* Summary Banner */}
-            <div className="bg-white p-4 rounded-lg border mb-4 flex justify-around text-center">
-              <div>
-                <p className="text-2xl font-bold text-cyan-600">{deliveries.length}</p>
-                <p className="text-sm text-gray-500">Deliveries</p>
-              </div>
-              <div className="border-l"></div>
-              <div>
-                <p className="text-2xl font-bold text-orange-500">{pickups.length}</p>
-                <p className="text-sm text-gray-500">Pickups</p>
-              </div>
-              <div className="border-l"></div>
-              <div>
-                <p className="text-2xl font-bold text-gray-400">{completed.length}</p>
-                <p className="text-sm text-gray-500">Done</p>
-              </div>
+          <div 
+            ref={listContainerRef}
+            className="flex-1 overflow-y-auto"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Pull-to-refresh indicator */}
+            <div 
+              className="flex items-center justify-center overflow-hidden transition-all duration-200"
+              style={{ height: pullDistance }}
+            >
+              {refreshing ? (
+                <div className="animate-spin w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full"></div>
+              ) : pullDistance > 60 ? (
+                <span className="text-cyan-600 text-sm font-medium">Release to refresh</span>
+              ) : pullDistance > 0 ? (
+                <span className="text-gray-400 text-sm">Pull to refresh</span>
+              ) : null}
             </div>
+            
+            <div className="p-4">
+              {/* Summary Banner */}
+              <div className="bg-white p-4 rounded-lg border mb-4 flex justify-around text-center">
+                <div>
+                  <p className="text-2xl font-bold text-cyan-600">{deliveries.length}</p>
+                  <p className="text-sm text-gray-500">Deliveries</p>
+                </div>
+                <div className="border-l"></div>
+                <div>
+                  <p className="text-2xl font-bold text-orange-500">{pickups.length}</p>
+                  <p className="text-sm text-gray-500">Pickups</p>
+                </div>
+                <div className="border-l"></div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-400">{completed.length}</p>
+                  <p className="text-sm text-gray-500">Done</p>
+                </div>
+              </div>
 
             {/* Deliveries */}
             <div className="mb-8">
@@ -893,7 +971,7 @@ export default function DriverPage() {
                         Open in Maps →
                       </a>
                       <button
-                        onClick={() => markDelivered(order.id)}
+                        onClick={() => confirmAndMarkDelivered(order.id)}
                         className="w-full bg-green-600 text-white py-3 rounded-lg font-medium"
                       >
                         Mark Delivered
@@ -950,7 +1028,7 @@ export default function DriverPage() {
                         Open in Maps →
                       </a>
                       <button
-                        onClick={() => markPickedUp(order.id)}
+                        onClick={() => confirmAndMarkPickedUp(order.id)}
                         className="w-full bg-green-600 text-white py-3 rounded-lg font-medium"
                       >
                         Mark Picked Up
@@ -994,6 +1072,7 @@ export default function DriverPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         ) : (
           /* Map View */
