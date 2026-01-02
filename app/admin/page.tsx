@@ -44,6 +44,8 @@ type Order = {
   ups_tracking_number: string | null
   ups_label_url: string | null
   admin_notes: string | null
+  delivery_photo_url: string | null
+  pickup_photo_url: string | null
   delivery_city: { name: string } | null
   return_city: { name: string } | null
   order_items?: OrderItem[]
@@ -875,6 +877,20 @@ export default function AdminPage() {
                   <p className="text-gray-600">{formatWindow(selectedOrder.delivery_window)}</p>
                   <p className="mt-2">{selectedOrder.delivery_address}</p>
                   <p className="text-gray-600">{selectedOrder.delivery_city?.name}</p>
+                  
+                  {/* Delivery photo proof */}
+                  {selectedOrder.delivery_photo_url && (
+                    <div className="mt-3">
+                      <p className="text-xs text-gray-500 mb-1">📸 Delivery Photo</p>
+                      <a href={selectedOrder.delivery_photo_url} target="_blank" rel="noopener noreferrer">
+                        <img 
+                          src={selectedOrder.delivery_photo_url} 
+                          alt="Delivery proof" 
+                          className="w-full max-w-[200px] rounded-lg border hover:opacity-80 transition"
+                        />
+                      </a>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Return info - different for ship-back vs pickup */}
@@ -922,6 +938,20 @@ export default function AdminPage() {
                     <p className="text-gray-600">{formatWindow(selectedOrder.return_window)}</p>
                     <p className="mt-2">{selectedOrder.return_address}</p>
                     <p className="text-gray-600">{selectedOrder.return_city?.name}</p>
+                    
+                    {/* Pickup photo proof */}
+                    {selectedOrder.pickup_photo_url && (
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-500 mb-1">📸 Pickup Photo</p>
+                        <a href={selectedOrder.pickup_photo_url} target="_blank" rel="noopener noreferrer">
+                          <img 
+                            src={selectedOrder.pickup_photo_url} 
+                            alt="Pickup proof" 
+                            className="w-full max-w-[200px] rounded-lg border hover:opacity-80 transition"
+                          />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

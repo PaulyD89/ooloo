@@ -94,6 +94,11 @@ export default function DriverPage() {
   const pullStartY = useRef(0)
   const listContainerRef = useRef<HTMLDivElement>(null)
   
+  // Photo capture state
+  const [pendingPhotoOrder, setPendingPhotoOrder] = useState<{ id: string; type: 'delivery' | 'pickup'; name: string } | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  
   // Geolocation state
   const [driverLocation, setDriverLocation] = useState<google.maps.LatLngLiteral | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -663,7 +668,9 @@ export default function DriverPage() {
     if (!order) return
     
     if (window.confirm(`Mark delivered to ${order.customer_name}?`)) {
-      await markDelivered(orderId)
+      // Trigger photo capture
+      setPendingPhotoOrder({ id: orderId, type: 'delivery', name: order.customer_name })
+      photoInputRef.current?.click()
     }
   }
 
@@ -707,7 +714,76 @@ export default function DriverPage() {
     if (!order) return
     
     if (window.confirm(`Mark picked up from ${order.customer_name}?`)) {
-      await markPickedUp(orderId)
+      // Trigger photo capture
+      setPendingPhotoOrder({ id: orderId, type: 'pickup', name: order.customer_name })
+      photoInputRef.current?.click()
+    }
+  }
+
+  async function handlePhotoCapture(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file || !pendingPhotoOrder) {
+      setPendingPhotoOrder(null)
+      return
+    }
+
+    setUploadingPhoto(true)
+
+    try {
+      // Create unique filename
+      const timestamp = Date.now()
+      const filename = `${pendingPhotoOrder.type}-${pendingPhotoOrder.id}-${timestamp}.jpg`
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('proof-photos')
+        .upload(filename, file, {
+          contentType: 'image/jpeg',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        alert('Failed to upload photo. Marking complete anyway.')
+      } else {
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('proof-photos')
+          .getPublicUrl(filename)
+
+        // Save photo URL to order
+        const photoField = pendingPhotoOrder.type === 'delivery' ? 'delivery_photo_url' : 'pickup_photo_url'
+        await supabase
+          .from('orders')
+          .update({ [photoField]: urlData.publicUrl })
+          .eq('id', pendingPhotoOrder.id)
+      }
+
+      // Mark the order complete
+      if (pendingPhotoOrder.type === 'delivery') {
+        await markDelivered(pendingPhotoOrder.id)
+      } else {
+        await markPickedUp(pendingPhotoOrder.id)
+      }
+
+    } catch (error) {
+      console.error('Photo capture error:', error)
+      alert('Error processing photo. Marking complete anyway.')
+      
+      // Still mark complete even if photo failed
+      if (pendingPhotoOrder.type === 'delivery') {
+        await markDelivered(pendingPhotoOrder.id)
+      } else {
+        await markPickedUp(pendingPhotoOrder.id)
+      }
+    }
+
+    setUploadingPhoto(false)
+    setPendingPhotoOrder(null)
+    
+    // Reset file input
+    if (photoInputRef.current) {
+      photoInputRef.current.value = ''
     }
   }
 
@@ -818,6 +894,26 @@ export default function DriverPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Hidden file input for photo capture */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handlePhotoCapture}
+        className="hidden"
+      />
+      
+      {/* Uploading overlay */}
+      {uploadingPhoto && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="font-medium">Uploading photo...</p>
+          </div>
+        </div>
+      )}
+      
       <header className="bg-white border-b p-4">
         <div className="max-w-2xl mx-auto flex justify-between items-center">
           <div>
