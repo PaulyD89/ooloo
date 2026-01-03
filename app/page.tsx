@@ -132,27 +132,67 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Cities Section */}
-      <section className="py-16 bg-gray-50 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">Available in 7 Cities</h2>
-          <p className="text-gray-600 mb-8">With more coming soon</p>
-          <div className="flex flex-wrap justify-center gap-3">
-            {['Los Angeles', 'New York', 'San Francisco', 'Chicago', 'Atlanta', 'Dallas', 'Denver'].map(city => (
-              <span 
-                key={city}
-                className="px-4 py-2 bg-white rounded-full text-gray-700 border border-gray-200 text-sm font-medium"
+      {/* Features Section */}
+      <section className="py-16 bg-slate-100 px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Book Early & Save */}
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+              <img 
+                src="/icon-save.png" 
+                alt="Save money" 
+                className="h-16 mx-auto mb-4"
+              />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Book Early & Save</h3>
+              <p className="text-gray-600 mb-4">
+                Book 60+ days in advance and save up to 20% on your rental.
+              </p>
+              <Link 
+                href="/book"
+                className="inline-block px-6 py-2 border border-gray-300 rounded-full text-gray-700 font-medium hover:bg-gray-50 transition"
               >
-                {city}
-              </span>
-            ))}
+                Book now
+              </Link>
+            </div>
+
+            {/* Premium Bags */}
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+              <img 
+                src="/icon-luggage.png" 
+                alt="Premium luggage" 
+                className="h-16 mx-auto mb-4"
+              />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Premium Bags, Simple Pricing</h3>
+              <p className="text-gray-600 mb-4">
+                One daily rate, no hidden fees. Carry-on, medium, or large—you choose.
+              </p>
+              <Link 
+                href="/book"
+                className="inline-block px-6 py-2 border border-gray-300 rounded-full text-gray-700 font-medium hover:bg-gray-50 transition"
+              >
+                See pricing
+              </Link>
+            </div>
+
+            {/* One-Way Trips */}
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+              <img 
+                src="/icon-shipping.png" 
+                alt="UPS shipping" 
+                className="h-16 mx-auto mb-4"
+              />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">One-Way Trips Welcome</h3>
+              <p className="text-gray-600 mb-4">
+                Flying home to a city we don't serve? No problem—return via prepaid UPS label.
+              </p>
+              <Link 
+                href="/faq"
+                className="inline-block px-6 py-2 border border-gray-300 rounded-full text-gray-700 font-medium hover:bg-gray-50 transition"
+              >
+                Learn more
+              </Link>
+            </div>
           </div>
-          <Link 
-            href="/cities"
-            className="inline-block mt-8 text-cyan-600 font-medium hover:underline"
-          >
-            See all cities →
-          </Link>
         </div>
       </section>
 
