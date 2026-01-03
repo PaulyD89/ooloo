@@ -47,29 +47,43 @@ export default function Home() {
 
       {/* Hero Section with Background */}
       <section className="relative bg-gradient-to-br from-slate-50 via-cyan-50 to-teal-50">
-        <div className="max-w-4xl mx-auto px-6 py-16 sm:py-24 text-center">
-          <img 
-            src="/oolooaltlogowithtag.png?v=3" 
-            alt="ooloo - Rent the luggage. Own the trip." 
-            className="h-40 sm:h-56 mx-auto mb-8"
-          />
-          <p className="text-lg sm:text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
-            Premium luggage delivered to your door. Return it when you're back.
-            No storage, no hassle.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/book"
-              className="inline-block bg-cyan-500 text-white px-8 py-4 rounded-full text-lg font-medium hover:bg-cyan-600 transition shadow-lg hover:shadow-xl"
-            >
-              Book Your Luggage
-            </Link>
-            <Link
-              href="/cities"
-              className="inline-block bg-white text-gray-700 px-8 py-4 rounded-full text-lg font-medium hover:bg-gray-50 transition border border-gray-200"
-            >
-              View Cities
-            </Link>
+        <div className="max-w-7xl mx-auto px-6 py-16 sm:py-20">
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            {/* Left - Text */}
+            <div className="text-center md:text-left">
+              <img 
+                src="/oolooaltlogowithtag.png?v=3" 
+                alt="ooloo - Rent the luggage. Own the trip." 
+                className="h-32 sm:h-44 mx-auto md:mx-0 mb-6"
+              />
+              <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-lg">
+                Premium luggage delivered to your door. Return it when you're back.
+                No storage, no hassle.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                <Link
+                  href="/book"
+                  className="inline-block bg-cyan-500 text-white px-8 py-4 rounded-full text-lg font-medium hover:bg-cyan-600 transition shadow-lg hover:shadow-xl"
+                >
+                  Book Your Luggage
+                </Link>
+                <Link
+                  href="/cities"
+                  className="inline-block bg-white text-gray-700 px-8 py-4 rounded-full text-lg font-medium hover:bg-gray-50 transition border border-gray-200"
+                >
+                  View Cities
+                </Link>
+              </div>
+            </div>
+            
+            {/* Right - Luggage Image */}
+            <div className="flex justify-center md:justify-end">
+              <img 
+                src="/hero-luggage.png" 
+                alt="ooloo premium luggage - carry-on, medium, and large sizes" 
+                className="w-full max-w-md lg:max-w-lg"
+              />
+            </div>
           </div>
         </div>
       </section>
