@@ -344,41 +344,26 @@ export default function AdminPage() {
     setCancelling(true)
 
     try {
-      // Update order status to cancelled
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({ 
-          status: 'cancelled',
-          admin_notes: selectedOrder.admin_notes 
-            ? `${selectedOrder.admin_notes}\n\n[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
-            : `[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
+      const response = await fetch('/api/admin/cancel-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: selectedOrder.id,
+          reason: cancelReason,
+          issueRefund
         })
-        .eq('id', selectedOrder.id)
+      })
 
-      if (updateError) throw updateError
+      const result = await response.json()
 
-      // Release inventory reservations
-      await supabase
-        .from('reservations')
-        .delete()
-        .eq('order_id', selectedOrder.id)
-
-      // If refund requested, we'll need Stripe integration
-      // For now, just log it - actual refund would need stripe_payment_intent_id
-      if (issueRefund) {
-        console.log('Refund requested for order:', selectedOrder.id, 'Amount:', selectedOrder.total)
-        // TODO: Implement Stripe refund when you have payment_intent_id stored
-        // const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
-        // await stripe.refunds.create({ payment_intent: order.stripe_payment_intent_id })
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to cancel order')
       }
 
       // Update local state
       const updatedOrder = { 
         ...selectedOrder, 
-        status: 'cancelled',
-        admin_notes: selectedOrder.admin_notes 
-          ? `${selectedOrder.admin_notes}\n\n[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
-          : `[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
+        status: 'cancelled'
       }
       setOrders(prev => prev.map(o => 
         o.id === selectedOrder.id ? updatedOrder : o
@@ -386,10 +371,11 @@ export default function AdminPage() {
       setSelectedOrder(updatedOrder)
       setShowCancelModal(false)
       setCancelReason('')
-      alert(issueRefund ? 'Order cancelled. Refund will be processed.' : 'Order cancelled (no refund).')
-    } catch (err) {
+      
+      alert(result.message)
+    } catch (err: any) {
       console.error('Cancel error:', err)
-      alert('Error cancelling order')
+      alert('Error cancelling order: ' + err.message)
     }
 
     setCancelling(false)
