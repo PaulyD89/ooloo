@@ -59,6 +59,18 @@ type InventoryAlert = {
   total: number
 }
 
+type Driver = {
+  id: string
+  user_id: string | null
+  name: string
+  email: string
+  phone: string | null
+  city_id: string
+  city?: { name: string }
+  is_active: boolean
+  created_at: string
+}
+
 const STATUS_OPTIONS = [
   'pending',
   'confirmed',
@@ -115,6 +127,20 @@ export default function AdminPage() {
   const [newPromoUsageLimit, setNewPromoUsageLimit] = useState('')
   const [newPromoExpires, setNewPromoExpires] = useState('')
   const [savingPromo, setSavingPromo] = useState(false)
+  
+  // Driver management state
+  const [showDriversModal, setShowDriversModal] = useState(false)
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [driversLoading, setDriversLoading] = useState(false)
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null)
+  const [newDriverName, setNewDriverName] = useState('')
+  const [newDriverEmail, setNewDriverEmail] = useState('')
+  const [newDriverPhone, setNewDriverPhone] = useState('')
+  const [newDriverCity, setNewDriverCity] = useState('')
+  const [savingDriver, setSavingDriver] = useState(false)
+  
+  // Resend email state
+  const [resendingEmail, setResendingEmail] = useState(false)
   
   // Editing state
   const [isEditing, setIsEditing] = useState(false)
@@ -437,6 +463,174 @@ export default function AdminPage() {
       .delete()
       .eq('id', id)
     loadPromoCodes()
+  }
+
+  // Resend confirmation email
+  async function resendConfirmationEmail() {
+    if (!selectedOrder) return
+    setResendingEmail(true)
+
+    try {
+      // Load order items for the email
+      const { data: items } = await supabase
+        .from('order_items')
+        .select('*, product:products(name)')
+        .eq('order_id', selectedOrder.id)
+
+      const emailItems = items?.map(item => ({
+        name: item.product?.name || 'Unknown',
+        quantity: item.quantity,
+        lineTotal: item.line_total
+      })) || []
+
+      const response = await fetch('/api/send-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerEmail: selectedOrder.customer_email,
+          customerName: selectedOrder.customer_name,
+          orderId: selectedOrder.id,
+          deliveryDate: selectedOrder.delivery_date,
+          returnDate: selectedOrder.return_date,
+          deliveryAddress: selectedOrder.delivery_address,
+          returnAddress: selectedOrder.return_address,
+          deliveryWindow: selectedOrder.delivery_window,
+          returnWindow: selectedOrder.return_window,
+          items: emailItems,
+          subtotal: selectedOrder.subtotal,
+          discount: selectedOrder.discount || selectedOrder.early_bird_discount + selectedOrder.promo_discount,
+          deliveryFee: selectedOrder.delivery_fee,
+          tax: selectedOrder.tax,
+          total: selectedOrder.total,
+          isShipBack: selectedOrder.return_method === 'ship',
+          shipBackAddress: selectedOrder.ship_back_address,
+          shipBackCity: selectedOrder.ship_back_city,
+          shipBackState: selectedOrder.ship_back_state,
+          shipBackZip: selectedOrder.ship_back_zip,
+          shipBackFee: selectedOrder.ship_back_fee
+        })
+      })
+
+      if (response.ok) {
+        alert('Confirmation email sent to ' + selectedOrder.customer_email)
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to send email')
+      }
+    } catch (err: any) {
+      console.error('Resend email error:', err)
+      alert('Error sending email: ' + err.message)
+    }
+
+    setResendingEmail(false)
+  }
+
+  // Driver management functions
+  async function loadDrivers() {
+    setDriversLoading(true)
+    const { data } = await supabase
+      .from('drivers')
+      .select('*, city:cities!city_id(name)')
+      .order('created_at', { ascending: false })
+    if (data) setDrivers(data)
+    setDriversLoading(false)
+  }
+
+  async function createDriver() {
+    if (!newDriverName || !newDriverEmail || !newDriverCity) {
+      alert('Please fill in name, email, and city')
+      return
+    }
+    setSavingDriver(true)
+
+    try {
+      // First, create the auth user by sending an invite
+      // For now, we'll create the driver record without auth
+      // The driver will need to sign up with their email to get access
+      
+      const { data: driver, error } = await supabase
+        .from('drivers')
+        .insert({
+          name: newDriverName,
+          email: newDriverEmail.toLowerCase(),
+          phone: newDriverPhone || null,
+          city_id: newDriverCity,
+          is_active: true,
+          user_id: null // Will be linked when driver signs up
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      alert(`Driver created! ${newDriverName} needs to sign up at /login with email: ${newDriverEmail}`)
+      loadDrivers()
+      setNewDriverName('')
+      setNewDriverEmail('')
+      setNewDriverPhone('')
+      setNewDriverCity('')
+      setEditingDriver(null)
+    } catch (err: any) {
+      console.error('Create driver error:', err)
+      alert('Error creating driver: ' + err.message)
+    }
+
+    setSavingDriver(false)
+  }
+
+  async function updateDriver() {
+    if (!editingDriver) return
+    setSavingDriver(true)
+
+    try {
+      const { error } = await supabase
+        .from('drivers')
+        .update({
+          name: newDriverName,
+          email: newDriverEmail.toLowerCase(),
+          phone: newDriverPhone || null,
+          city_id: newDriverCity
+        })
+        .eq('id', editingDriver.id)
+
+      if (error) throw error
+
+      loadDrivers()
+      setEditingDriver(null)
+      setNewDriverName('')
+      setNewDriverEmail('')
+      setNewDriverPhone('')
+      setNewDriverCity('')
+    } catch (err: any) {
+      console.error('Update driver error:', err)
+      alert('Error updating driver: ' + err.message)
+    }
+
+    setSavingDriver(false)
+  }
+
+  async function toggleDriverActive(driver: Driver) {
+    await supabase
+      .from('drivers')
+      .update({ is_active: !driver.is_active })
+      .eq('id', driver.id)
+    loadDrivers()
+  }
+
+  function startEditingDriver(driver: Driver) {
+    setEditingDriver(driver)
+    setNewDriverName(driver.name)
+    setNewDriverEmail(driver.email)
+    setNewDriverPhone(driver.phone || '')
+    setNewDriverCity(driver.city_id)
+  }
+
+  function cancelEditingDriver() {
+    setEditingDriver(null)
+    setNewDriverName('')
+    setNewDriverEmail('')
+    setNewDriverPhone('')
+    setNewDriverCity('')
   }
 
   function exportOrdersToCSV() {
@@ -773,6 +967,12 @@ export default function AdminPage() {
               <span>🎟️</span> Promo Codes
             </button>
             <button
+              onClick={() => { setShowDriversModal(true); loadDrivers(); }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            >
+              <span>🚗</span> Drivers
+            </button>
+            <button
               onClick={exportOrdersToCSV}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
             >
@@ -978,6 +1178,13 @@ export default function AdminPage() {
                     <p>{selectedOrder.customer_name}</p>
                     <p className="text-gray-600">{selectedOrder.customer_email}</p>
                     <p className="text-gray-600">{selectedOrder.customer_phone}</p>
+                    <button
+                      onClick={resendConfirmationEmail}
+                      disabled={resendingEmail}
+                      className="mt-2 text-sm text-cyan-600 hover:underline disabled:opacity-50"
+                    >
+                      {resendingEmail ? 'Sending...' : '📧 Resend Confirmation Email'}
+                    </button>
                   </>
                 )}
               </div>
@@ -1313,6 +1520,135 @@ export default function AdminPage() {
                           className="px-3 py-1 rounded text-sm bg-red-100 text-red-700"
                         >
                           Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drivers Modal */}
+      {showDriversModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold">🚗 Driver Management</h2>
+              <button 
+                onClick={() => { setShowDriversModal(false); cancelEditingDriver(); }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {/* Add/Edit driver form */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <h3 className="font-semibold mb-3">{editingDriver ? 'Edit Driver' : 'Add New Driver'}</h3>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={newDriverName}
+                    onChange={e => setNewDriverName(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={newDriverEmail}
+                    onChange={e => setNewDriverEmail(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone (optional)"
+                    value={newDriverPhone}
+                    onChange={e => setNewDriverPhone(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <select
+                    value={newDriverCity}
+                    onChange={e => setNewDriverCity(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  >
+                    <option value="">Select City</option>
+                    {cities.map(city => (
+                      <option key={city.id} value={city.id}>{city.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  {editingDriver ? (
+                    <>
+                      <button
+                        onClick={cancelEditingDriver}
+                        className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={updateDriver}
+                        disabled={savingDriver}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {savingDriver ? 'Saving...' : 'Update Driver'}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={createDriver}
+                      disabled={savingDriver || !newDriverName || !newDriverEmail || !newDriverCity}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingDriver ? 'Adding...' : 'Add Driver'}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  After adding, the driver needs to sign up at /login with their email to access the driver portal.
+                </p>
+              </div>
+
+              {/* Existing drivers */}
+              <h3 className="font-semibold mb-3">Existing Drivers</h3>
+              {driversLoading ? (
+                <p className="text-gray-500">Loading...</p>
+              ) : drivers.length === 0 ? (
+                <p className="text-gray-500">No drivers yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {drivers.map(driver => (
+                    <div 
+                      key={driver.id} 
+                      className={`flex items-center justify-between p-3 border rounded-lg ${!driver.is_active ? 'bg-gray-100 opacity-60' : ''}`}
+                    >
+                      <div>
+                        <span className="font-medium">{driver.name}</span>
+                        {!driver.is_active && <span className="ml-2 text-xs text-red-500">(Inactive)</span>}
+                        <div className="text-sm text-gray-600">{driver.email}</div>
+                        <div className="text-xs text-gray-500">
+                          {driver.city?.name || 'No city'} 
+                          {driver.phone && ` • ${driver.phone}`}
+                          {!driver.user_id && ' • ⚠️ Not signed up yet'}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEditingDriver(driver)}
+                          className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => toggleDriverActive(driver)}
+                          className={`px-3 py-1 rounded text-sm ${driver.is_active ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}
+                        >
+                          {driver.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                       </div>
                     </div>
