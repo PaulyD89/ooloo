@@ -79,7 +79,7 @@ export default function Home() {
             {/* Right - Luggage Image */}
             <div className="flex justify-center md:justify-end">
               <img 
-                src="/hero-luggagev2.png" 
+                src="/hero-luggagev3.png" 
                 alt="ooloo premium luggage - carry-on, medium, and large sizes" 
                 className="w-full max-w-md lg:max-w-lg"
               />
