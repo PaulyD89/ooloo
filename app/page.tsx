@@ -54,7 +54,7 @@ export default function Home() {
               <img 
                 src="/oolooaltlogowithtag.png?v=3" 
                 alt="ooloo - Rent the luggage. Own the trip." 
-                className="h-32 sm:h-44 mx-auto md:mx-0 mb-6"
+                className="h-32 sm:h-44 md:h-52 mx-auto md:mx-0 mb-6"
               />
               <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-lg">
                 Premium luggage delivered to your door. Return it when you're back.
@@ -79,7 +79,7 @@ export default function Home() {
             {/* Right - Luggage Image */}
             <div className="flex justify-center md:justify-end">
               <img 
-                src="/hero-luggage.png" 
+                src="/hero-luggagev2.png" 
                 alt="ooloo premium luggage - carry-on, medium, and large sizes" 
                 className="w-full max-w-md lg:max-w-lg"
               />
