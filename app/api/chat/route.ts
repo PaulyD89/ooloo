@@ -27,9 +27,10 @@ We deliver anywhere within these metro areas, including hotels, Airbnbs, offices
 === LUGGAGE OPTIONS ===
 All bags are ooloo custom-designed premium hardshell luggage with 360° spinner wheels, TSA-approved locks, and expandable compartments.
 
-- Carry-On (21"): $8/day - Fits in overhead bin, perfect for short trips
-- Medium Checked (26"): $10/day - Ideal for 1-week trips
-- Large Checked (30"): $12/day - Great for longer trips or families
+- Carry-On (21"): $5/day - Fits in overhead bin, perfect for short trips
+- Medium Checked (26"): $7/day - Ideal for 1-week trips
+- Large Checked (30"): $9/day - Great for longer trips or families
+- Set (all 3 bags): $11/day - Best value for families or extended trips
 
 Customers can rent multiple bags of any size.
 
