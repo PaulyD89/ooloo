@@ -848,19 +848,26 @@ export default function DriverPage() {
       .join(', ')
   }
 
+  // Sort by time window: morning -> afternoon -> evening
+  const windowOrder: Record<string, number> = { morning: 1, afternoon: 2, evening: 3 }
+  
   // Filter out ship-back orders from pickups (they ship themselves)
-  const deliveries = orders.filter(o => 
-    o.delivery_date === selectedDate && 
-    o.delivery_city?.id === driver?.city_id &&
-    !['delivered', 'out_for_pickup', 'returned'].includes(o.status)
-  )
+  const deliveries = orders
+    .filter(o => 
+      o.delivery_date === selectedDate && 
+      o.delivery_city?.id === driver?.city_id &&
+      !['delivered', 'out_for_pickup', 'returned'].includes(o.status)
+    )
+    .sort((a, b) => (windowOrder[a.delivery_window] || 99) - (windowOrder[b.delivery_window] || 99))
 
-  const pickups = orders.filter(o => 
-    o.return_date === selectedDate && 
-    o.return_city?.id === driver?.city_id &&
-    o.return_method !== 'ship' && // Exclude ship-back orders
-    ['delivered', 'out_for_pickup'].includes(o.status)
-  )
+  const pickups = orders
+    .filter(o => 
+      o.return_date === selectedDate && 
+      o.return_city?.id === driver?.city_id &&
+      o.return_method !== 'ship' && // Exclude ship-back orders
+      ['delivered', 'out_for_pickup'].includes(o.status)
+    )
+    .sort((a, b) => (windowOrder[a.return_window || ''] || 99) - (windowOrder[b.return_window || ''] || 99))
 
   const completed = orders.filter(o => 
     o.status === 'returned' ||
