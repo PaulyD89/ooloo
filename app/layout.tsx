@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "ooloo - Rent the Luggage, Own the Trip",
   description: "Rent premium luggage delivered to your door. No storage, no hassle. Available in Los Angeles, New York, San Francisco, Chicago, Atlanta, Dallas, and Denver.",
   icons: {
-    icon: "/favicon.png",
+    icon: "/favicon.png?v=2",
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
