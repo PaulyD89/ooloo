@@ -88,40 +88,28 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* How it works - Video */}
       <section className="py-16 sm:py-20 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-10">
             <img 
               src="/howitworks.png" 
               alt="How It Works" 
               className="h-14 sm:h-20 mx-auto mb-4"
             />
-            <p className="text-gray-600 text-lg">Three simple steps to travel lighter</p>
+            <p className="text-gray-600 text-lg">See how easy it is to travel lighter</p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
-            <div className="flex justify-center">
-              <img 
-                src="/howitworks1.png" 
-                alt="Step 1: Choose your dates" 
-                className="w-full max-w-sm rounded-2xl shadow-lg hover:shadow-xl transition-shadow"
-              />
-            </div>
-            <div className="flex justify-center">
-              <img 
-                src="/howitworks2.png" 
-                alt="Step 2: Pick your bags" 
-                className="w-full max-w-sm rounded-2xl shadow-lg hover:shadow-xl transition-shadow"
-              />
-            </div>
-            <div className="flex justify-center">
-              <img 
-                src="/howitworks3.png" 
-                alt="Step 3: We deliver & pick up" 
-                className="w-full max-w-sm rounded-2xl shadow-lg hover:shadow-xl transition-shadow"
-              />
-            </div>
+          <div className="rounded-2xl overflow-hidden shadow-xl">
+            <video 
+              className="w-full"
+              controls
+              poster="/hero-luggagev3.png"
+              playsInline
+            >
+              <source src="/ooloo-promo.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
         </div>
       </section>
