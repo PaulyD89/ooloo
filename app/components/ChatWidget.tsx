@@ -38,7 +38,7 @@ export default function ChatWidget() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, { role: 'user', content: userMessage }].filter(m => m.role !== 'assistant' || messages.indexOf(m) !== 0)
+          messages: [...messages, { role: 'user' as const, content: userMessage }].slice(1)
         })
       })
 
