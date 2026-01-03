@@ -537,8 +537,8 @@ export default function AdminPage() {
   }
 
   async function createDriver() {
-    if (!newDriverName || !newDriverEmail || !newDriverCity) {
-      alert('Please fill in name, email, and city')
+    if (!newDriverName || !newDriverEmail || !newDriverCity || !newDriverPhone || newDriverPhone.length < 14) {
+      alert('Please fill in all fields (name, email, phone, city)')
       return
     }
     setSavingDriver(true)
@@ -1566,9 +1566,17 @@ export default function AdminPage() {
                   />
                   <input
                     type="tel"
-                    placeholder="Phone (optional)"
+                    placeholder="Phone"
                     value={newDriverPhone}
-                    onChange={e => setNewDriverPhone(e.target.value)}
+                    onChange={e => {
+                      // Auto-format phone number
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      let formatted = ''
+                      if (digits.length > 0) formatted = '(' + digits.slice(0, 3)
+                      if (digits.length >= 3) formatted += ') ' + digits.slice(3, 6)
+                      if (digits.length >= 6) formatted += '-' + digits.slice(6, 10)
+                      setNewDriverPhone(formatted)
+                    }}
                     className="p-2 border rounded-lg"
                   />
                   <select
@@ -1593,7 +1601,7 @@ export default function AdminPage() {
                       </button>
                       <button
                         onClick={updateDriver}
-                        disabled={savingDriver}
+                        disabled={savingDriver || !newDriverPhone || newDriverPhone.length < 14}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                       >
                         {savingDriver ? 'Saving...' : 'Update Driver'}
@@ -1602,7 +1610,7 @@ export default function AdminPage() {
                   ) : (
                     <button
                       onClick={createDriver}
-                      disabled={savingDriver || !newDriverName || !newDriverEmail || !newDriverCity}
+                      disabled={savingDriver || !newDriverName || !newDriverEmail || !newDriverCity || !newDriverPhone || newDriverPhone.length < 14}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
                       {savingDriver ? 'Adding...' : 'Add Driver'}
