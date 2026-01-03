@@ -7,14 +7,96 @@ type Message = {
   content: string
 }
 
+const BOT_NAMES = [
+  'Luna',
+  'Max',
+  'Sophie',
+  'Oliver',
+  'Mia',
+  'Leo',
+  'Zoe',
+  'Finn',
+  'Ava',
+  'Jasper',
+  'Ruby',
+  'Sam',
+  'Chloe',
+  'Eli',
+  'Nora'
+]
+
+const GREETING_TEMPLATES = [
+  "Hi! 👋 I'm {name} from ooloo. How can I help you today?",
+  "Hey there! I'm {name} from ooloo. What can I help you with?",
+  "Hello! 👋 {name} here from ooloo. How can I assist you?",
+  "Hi! I'm {name} from ooloo. Got questions about luggage rental?",
+  "Hey! 👋 I'm {name} from ooloo. What brings you here today?",
+  "Hello! I'm {name} from ooloo. How can I make your trip easier?",
+  "Hi there! {name} from ooloo here. What can I do for you?",
+  "Hey! I'm {name} from ooloo. Ready to help with your travel plans!",
+  "Hello! 👋 I'm {name} from ooloo. Ask me anything about our luggage rentals!",
+  "Hi! {name} here from ooloo. How can I help you travel lighter?",
+  "Hey there! 👋 I'm {name} from ooloo. What questions do you have?",
+  "Hello! I'm {name} from ooloo. Let me help you with your trip!",
+  "Hi! I'm {name} from ooloo. Planning a trip? I can help!",
+  "Hey! {name} from ooloo here. 👋 What can I help you with today?",
+  "Hello there! I'm {name} from ooloo. How can I assist you?",
+  "Hi! 👋 {name} from ooloo at your service. What do you need?",
+  "Hey! I'm {name} from ooloo. Let's get your luggage sorted!",
+  "Hello! I'm {name} from ooloo. Traveling soon? I've got answers!",
+  "Hi there! 👋 {name} here from ooloo. How can I help?",
+  "Hey! I'm {name} from ooloo. Ask away!"
+]
+
+const RETURN_GREETINGS = [
+  "Oh, you're back! 👋 What else can I help you with?",
+  "Hey, welcome back! What can I help you with now?",
+  "Good to see you again! 👋 What else do you need?",
+  "You're back! How can I help you this time?",
+  "Hey again! 👋 What else can I do for you?",
+  "Welcome back! Got more questions for me?",
+  "Oh hey, you're back! What's on your mind?",
+  "Nice to see you again! 👋 How can I help now?",
+  "You returned! What else can I assist with?",
+  "Hey, welcome back! 👋 What can I do for you?"
+]
+
+const SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes in milliseconds
+
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: "Hi! 👋 I'm ooloo's assistant. How can I help you today?" }
-  ])
+  const [botName, setBotName] = useState('')
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [lastOpenTime, setLastOpenTime] = useState<number | null>(null)
+  const [hasOpenedBefore, setHasOpenedBefore] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const openChat = () => {
+    if (!isOpen) {
+      const now = Date.now()
+      const isReturningWithinSession = lastOpenTime && (now - lastOpenTime) < SESSION_TIMEOUT && hasOpenedBefore
+      
+      if (isReturningWithinSession && botName) {
+        // Same session, same bot, return greeting
+        const returnGreeting = RETURN_GREETINGS[Math.floor(Math.random() * RETURN_GREETINGS.length)]
+        setMessages(prev => [...prev, { role: 'assistant', content: returnGreeting }])
+      } else {
+        // New session or first time
+        const randomName = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
+        const greetingTemplate = GREETING_TEMPLATES[Math.floor(Math.random() * GREETING_TEMPLATES.length)]
+        const greeting = greetingTemplate.replace('{name}', randomName)
+        
+        setBotName(randomName)
+        setMessages([{ role: 'assistant', content: greeting }])
+        setHasOpenedBefore(true)
+      }
+      
+      setLastOpenTime(now)
+    }
+    setIsOpen(!isOpen)
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -64,7 +146,7 @@ export default function ChatWidget() {
     <>
       {/* Chat Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={openChat}
         className="fixed bottom-6 right-6 z-50 bg-cyan-500 hover:bg-cyan-600 text-white rounded-full p-4 shadow-lg hover:shadow-xl transition-all"
         aria-label="Open chat"
       >
@@ -86,7 +168,7 @@ export default function ChatWidget() {
           <div className="bg-cyan-500 text-white px-4 py-3 rounded-t-2xl flex items-center gap-3">
             <img src="/oolooicon.png" alt="ooloo" className="h-8" />
             <div>
-              <div className="font-semibold">ooloo Support</div>
+              <div className="font-semibold">{botName} from ooloo</div>
               <div className="text-xs text-cyan-100">We typically reply instantly</div>
             </div>
           </div>
