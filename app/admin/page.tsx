@@ -91,11 +91,30 @@ export default function AdminPage() {
   const [dateFilter, setDateFilter] = useState<'all' | 'today_delivery' | 'today_pickup' | 'custom'>('all')
   const [customDate, setCustomDate] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [cityFilter, setCityFilter] = useState('all')
+  const [cities, setCities] = useState<{ id: string; name: string }[]>([])
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [loadingItems, setLoadingItems] = useState(false)
   const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([])
   const [alertsLoading, setAlertsLoading] = useState(true)
+  
+  // Cancel/refund state
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [issueRefund, setIssueRefund] = useState(true)
+  const [cancelling, setCancelling] = useState(false)
+  
+  // Promo codes state
+  const [showPromoModal, setShowPromoModal] = useState(false)
+  const [promoCodes, setPromoCodes] = useState<any[]>([])
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [newPromoCode, setNewPromoCode] = useState('')
+  const [newPromoType, setNewPromoType] = useState<'percent' | 'fixed'>('percent')
+  const [newPromoValue, setNewPromoValue] = useState('')
+  const [newPromoUsageLimit, setNewPromoUsageLimit] = useState('')
+  const [newPromoExpires, setNewPromoExpires] = useState('')
+  const [savingPromo, setSavingPromo] = useState(false)
   
   // Editing state
   const [isEditing, setIsEditing] = useState(false)
@@ -157,11 +176,21 @@ export default function AdminPage() {
     setAuthLoading(false)
     loadOrders()
     loadInventoryAlerts()
+    loadCities()
   }
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  async function loadCities() {
+    const { data } = await supabase
+      .from('cities')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name')
+    if (data) setCities(data)
   }
 
   async function loadOrders() {
@@ -309,6 +338,121 @@ export default function AdminPage() {
     setSaving(false)
   }
 
+  // Cancel and refund order
+  async function cancelOrder() {
+    if (!selectedOrder) return
+    setCancelling(true)
+
+    try {
+      // Update order status to cancelled
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ 
+          status: 'cancelled',
+          admin_notes: selectedOrder.admin_notes 
+            ? `${selectedOrder.admin_notes}\n\n[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
+            : `[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
+        })
+        .eq('id', selectedOrder.id)
+
+      if (updateError) throw updateError
+
+      // Release inventory reservations
+      await supabase
+        .from('reservations')
+        .delete()
+        .eq('order_id', selectedOrder.id)
+
+      // If refund requested, we'll need Stripe integration
+      // For now, just log it - actual refund would need stripe_payment_intent_id
+      if (issueRefund) {
+        console.log('Refund requested for order:', selectedOrder.id, 'Amount:', selectedOrder.total)
+        // TODO: Implement Stripe refund when you have payment_intent_id stored
+        // const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+        // await stripe.refunds.create({ payment_intent: order.stripe_payment_intent_id })
+      }
+
+      // Update local state
+      const updatedOrder = { 
+        ...selectedOrder, 
+        status: 'cancelled',
+        admin_notes: selectedOrder.admin_notes 
+          ? `${selectedOrder.admin_notes}\n\n[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
+          : `[CANCELLED] ${new Date().toLocaleDateString()}: ${cancelReason}`
+      }
+      setOrders(prev => prev.map(o => 
+        o.id === selectedOrder.id ? updatedOrder : o
+      ))
+      setSelectedOrder(updatedOrder)
+      setShowCancelModal(false)
+      setCancelReason('')
+      alert(issueRefund ? 'Order cancelled. Refund will be processed.' : 'Order cancelled (no refund).')
+    } catch (err) {
+      console.error('Cancel error:', err)
+      alert('Error cancelling order')
+    }
+
+    setCancelling(false)
+  }
+
+  // Promo code functions
+  async function loadPromoCodes() {
+    setPromoLoading(true)
+    const { data } = await supabase
+      .from('promo_codes')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (data) setPromoCodes(data)
+    setPromoLoading(false)
+  }
+
+  async function createPromoCode() {
+    if (!newPromoCode || !newPromoValue) return
+    setSavingPromo(true)
+
+    const { error } = await supabase
+      .from('promo_codes')
+      .insert({
+        code: newPromoCode.toUpperCase().replace(/\s/g, ''),
+        discount_type: newPromoType,
+        discount_value: newPromoType === 'percent' 
+          ? parseInt(newPromoValue) 
+          : parseInt(newPromoValue) * 100, // Convert dollars to cents for fixed
+        usage_limit: newPromoUsageLimit ? parseInt(newPromoUsageLimit) : null,
+        expires_at: newPromoExpires || null,
+        is_active: true,
+        times_used: 0
+      })
+
+    if (!error) {
+      loadPromoCodes()
+      setNewPromoCode('')
+      setNewPromoValue('')
+      setNewPromoUsageLimit('')
+      setNewPromoExpires('')
+    } else {
+      alert('Error creating promo code: ' + error.message)
+    }
+    setSavingPromo(false)
+  }
+
+  async function togglePromoActive(id: string, currentlyActive: boolean) {
+    await supabase
+      .from('promo_codes')
+      .update({ is_active: !currentlyActive })
+      .eq('id', id)
+    loadPromoCodes()
+  }
+
+  async function deletePromoCode(id: string) {
+    if (!confirm('Delete this promo code?')) return
+    await supabase
+      .from('promo_codes')
+      .delete()
+      .eq('id', id)
+    loadPromoCodes()
+  }
+
   function exportOrdersToCSV() {
     const headers = [
       'Order ID',
@@ -392,6 +536,12 @@ export default function AdminPage() {
   const filteredOrders = orders.filter(order => {
     // Status filter
     if (filter !== 'all' && order.status !== filter) return false
+    
+    // City filter
+    if (cityFilter !== 'all') {
+      const cityName = cities.find(c => c.id === cityFilter)?.name
+      if (order.delivery_city?.name !== cityName && order.return_city?.name !== cityName) return false
+    }
     
     // Date filter
     if (dateFilter === 'today_delivery' && order.delivery_date !== today) return false
@@ -601,7 +751,17 @@ export default function AdminPage() {
               className="w-full p-3 border rounded-lg"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <select
+              value={cityFilter}
+              onChange={e => setCityFilter(e.target.value)}
+              className="p-3 border rounded-lg bg-white"
+            >
+              <option value="all">All Cities</option>
+              {cities.map(city => (
+                <option key={city.id} value={city.id}>{city.name}</option>
+              ))}
+            </select>
             <select
               value={dateFilter}
               onChange={e => setDateFilter(e.target.value as any)}
@@ -620,6 +780,12 @@ export default function AdminPage() {
                 className="p-3 border rounded-lg"
               />
             )}
+            <button
+              onClick={() => { setShowPromoModal(true); loadPromoCodes(); }}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+            >
+              <span>🎟️</span> Promo Codes
+            </button>
             <button
               onClick={exportOrdersToCSV}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -738,17 +904,27 @@ export default function AdminPage() {
               {/* Status update */}
               <div>
                 <label className="block text-sm font-medium mb-2">Status</label>
-                <select
-                  value={selectedOrder.status}
-                  onChange={e => updateStatus(selectedOrder.id, e.target.value)}
-                  className="w-full p-3 border rounded-lg"
-                >
-                  {STATUS_OPTIONS.map(status => (
-                    <option key={status} value={status}>
-                      {status.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedOrder.status}
+                    onChange={e => updateStatus(selectedOrder.id, e.target.value)}
+                    className="flex-1 p-3 border rounded-lg"
+                  >
+                    {STATUS_OPTIONS.map(status => (
+                      <option key={status} value={status}>
+                        {status.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedOrder.status !== 'cancelled' && (
+                    <button
+                      onClick={() => setShowCancelModal(true)}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                    >
+                      Cancel Order
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Customer info */}
@@ -995,6 +1171,168 @@ export default function AdminPage() {
                   <span>${(selectedOrder.total / 100).toFixed(2)}</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel/Refund Modal */}
+      {showCancelModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold mb-4">Cancel Order</h2>
+            <p className="text-gray-600 mb-4">
+              Cancel order for {selectedOrder.customer_name}?
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Reason for cancellation</label>
+              <textarea
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder="Customer requested cancellation..."
+                className="w-full p-3 border rounded-lg h-24 resize-none"
+              />
+            </div>
+            
+            <label className="flex items-center gap-2 mb-6 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={issueRefund}
+                onChange={e => setIssueRefund(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span>Issue refund (${(selectedOrder.total / 100).toFixed(2)})</span>
+            </label>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={cancelOrder}
+                disabled={cancelling}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {cancelling ? 'Cancelling...' : (issueRefund ? 'Cancel & Refund' : 'Cancel Order')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Promo Codes Modal */}
+      {showPromoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold">🎟️ Promo Codes</h2>
+              <button 
+                onClick={() => setShowPromoModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {/* Create new promo code */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <h3 className="font-semibold mb-3">Create New Code</h3>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    placeholder="CODE (e.g. SAVE20)"
+                    value={newPromoCode}
+                    onChange={e => setNewPromoCode(e.target.value.toUpperCase())}
+                    className="p-2 border rounded-lg"
+                  />
+                  <select
+                    value={newPromoType}
+                    onChange={e => setNewPromoType(e.target.value as 'percent' | 'fixed')}
+                    className="p-2 border rounded-lg"
+                  >
+                    <option value="percent">Percent Off</option>
+                    <option value="fixed">Fixed Amount</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder={newPromoType === 'percent' ? 'Percent (e.g. 10)' : 'Amount in $ (e.g. 20)'}
+                    value={newPromoValue}
+                    onChange={e => setNewPromoValue(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Usage limit (optional)"
+                    value={newPromoUsageLimit}
+                    onChange={e => setNewPromoUsageLimit(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <input
+                    type="date"
+                    placeholder="Expires (optional)"
+                    value={newPromoExpires}
+                    onChange={e => setNewPromoExpires(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <button
+                    onClick={createPromoCode}
+                    disabled={savingPromo || !newPromoCode || !newPromoValue}
+                    className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {savingPromo ? 'Creating...' : 'Create Code'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing promo codes */}
+              <h3 className="font-semibold mb-3">Existing Codes</h3>
+              {promoLoading ? (
+                <p className="text-gray-500">Loading...</p>
+              ) : promoCodes.length === 0 ? (
+                <p className="text-gray-500">No promo codes yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {promoCodes.map(promo => (
+                    <div 
+                      key={promo.id} 
+                      className={`flex items-center justify-between p-3 border rounded-lg ${!promo.is_active ? 'bg-gray-100 opacity-60' : ''}`}
+                    >
+                      <div>
+                        <span className="font-mono font-bold">{promo.code}</span>
+                        <span className="ml-2 text-gray-600">
+                          {promo.discount_type === 'percent' 
+                            ? `${promo.discount_value}% off`
+                            : `$${(promo.discount_value / 100).toFixed(2)} off`
+                          }
+                        </span>
+                        <div className="text-xs text-gray-500">
+                          Used: {promo.times_used || 0}{promo.usage_limit ? ` / ${promo.usage_limit}` : ''}
+                          {promo.expires_at && ` • Expires: ${new Date(promo.expires_at).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => togglePromoActive(promo.id, promo.is_active)}
+                          className={`px-3 py-1 rounded text-sm ${promo.is_active ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}
+                        >
+                          {promo.is_active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          onClick={() => deletePromoCode(promo.id)}
+                          className="px-3 py-1 rounded text-sm bg-red-100 text-red-700"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
