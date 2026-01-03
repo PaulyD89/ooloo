@@ -74,26 +74,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Trust Badges */}
-      <section className="py-8 border-b border-gray-100">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="flex flex-wrap justify-center gap-8 sm:gap-16 text-center">
-            <div className="flex items-center gap-2 text-gray-600">
-              <span className="text-2xl">✓</span>
-              <span className="font-medium">Free Cancellation</span>
-            </div>
-            <div className="flex items-center gap-2 text-gray-600">
-              <span className="text-2xl">✓</span>
-              <span className="font-medium">Door-to-Door Delivery</span>
-            </div>
-            <div className="flex items-center gap-2 text-gray-600">
-              <span className="text-2xl">✓</span>
-              <span className="font-medium">Premium Quality</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* How it works */}
       <section className="py-16 sm:py-20 px-6">
         <div className="max-w-6xl mx-auto">
