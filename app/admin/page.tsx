@@ -815,31 +815,43 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b p-6">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-6">
-            <a href="/">
-              <img src="/oolooicon.png" alt="ooloo" className="h-12" />
-            </a>
-            <nav className="flex gap-4">
-              <span className="font-medium text-black">Orders</span>
-              <a href="/admin/inventory" className="text-gray-500 hover:text-black">Inventory</a>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500">{user?.email}</span>
-            <button 
-              onClick={() => { loadOrders(); loadInventoryAlerts(); }}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            >
-              Refresh
-            </button>
-            <button 
-              onClick={handleLogout}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-            >
-              Logout
-            </button>
+      <header className="bg-white border-b p-4 sm:p-6">
+        <div className="max-w-6xl mx-auto">
+          {/* Mobile: Stack vertically */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <a href="/">
+                  <img src="/oolooicon.png" alt="ooloo" className="h-10 sm:h-12" />
+                </a>
+                <nav className="flex gap-3 sm:gap-4 text-sm sm:text-base">
+                  <span className="font-medium text-black">Orders</span>
+                  <a href="/admin/inventory" className="text-gray-500 hover:text-black">Inventory</a>
+                </nav>
+              </div>
+              {/* Mobile logout */}
+              <button 
+                onClick={handleLogout}
+                className="sm:hidden px-3 py-1 text-sm border rounded-lg hover:bg-gray-50"
+              >
+                Logout
+              </button>
+            </div>
+            <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+              <span className="text-xs sm:text-sm text-gray-500 truncate max-w-[150px] sm:max-w-none">{user?.email}</span>
+              <button 
+                onClick={() => { loadOrders(); loadInventoryAlerts(); }}
+                className="px-3 sm:px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+              >
+                Refresh
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="hidden sm:block px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -960,23 +972,26 @@ export default function AdminPage() {
                 className="p-3 border rounded-lg"
               />
             )}
+          </div>
+          {/* Action buttons - better mobile layout */}
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => { setShowPromoModal(true); loadPromoCodes(); }}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm sm:text-base"
             >
-              <span>🎟️</span> Promo Codes
+              <span>🎟️</span> <span className="hidden sm:inline">Promo Codes</span><span className="sm:hidden">Promos</span>
             </button>
             <button
               onClick={() => { setShowDriversModal(true); loadDrivers(); }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm sm:text-base"
             >
               <span>🚗</span> Drivers
             </button>
             <button
               onClick={exportOrdersToCSV}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm sm:text-base"
             >
-              <span>📥</span> Export CSV
+              <span>📥</span> <span className="hidden sm:inline">Export CSV</span><span className="sm:hidden">Export</span>
             </button>
           </div>
         </div>

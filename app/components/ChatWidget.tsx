@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 
 type Message = {
   role: 'user' | 'assistant'
@@ -58,7 +59,11 @@ const RETURN_GREETINGS = [
 
 const SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes in milliseconds
 
+// Pages where chat should be hidden
+const HIDDEN_PATHS = ['/admin', '/driver', '/login']
+
 export default function ChatWidget() {
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [botName, setBotName] = useState('')
   const [userName, setUserName] = useState('')
@@ -68,6 +73,13 @@ export default function ChatWidget() {
   const [lastOpenTime, setLastOpenTime] = useState<number | null>(null)
   const [hasOpenedBefore, setHasOpenedBefore] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Hide chat on admin/driver/login pages
+  const shouldHide = HIDDEN_PATHS.some(path => pathname?.startsWith(path))
+  
+  if (shouldHide) {
+    return null
+  }
 
   const openChat = () => {
     if (!isOpen) {
