@@ -154,12 +154,23 @@ Example bad response:
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages } = await request.json();
+    const { messages, botName, userName } = await request.json();
+
+    // Build dynamic system prompt with names
+    let dynamicPrompt = SYSTEM_PROMPT;
+    if (botName) {
+      dynamicPrompt += `\n\nYour name is ${botName}. You work at ooloo.`;
+    }
+    if (userName) {
+      dynamicPrompt += `\n\nThe customer's name is ${userName}. Use their name occasionally (but not every message) to keep it personal.`;
+    } else {
+      dynamicPrompt += `\n\nYou just asked for the customer's name. When they respond, greet them warmly by name and ask how you can help with their luggage rental needs.`;
+    }
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
-      system: SYSTEM_PROMPT,
+      system: dynamicPrompt,
       messages: messages.map((msg: { role: string; content: string }) => ({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,

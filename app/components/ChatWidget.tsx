@@ -26,39 +26,34 @@ const BOT_NAMES = [
 ]
 
 const GREETING_TEMPLATES = [
-  "Hi! 👋 I'm {name} from ooloo. How can I help you today?",
-  "Hey there! I'm {name} from ooloo. What can I help you with?",
-  "Hello! 👋 {name} here from ooloo. How can I assist you?",
-  "Hi! I'm {name} from ooloo. Got questions about luggage rental?",
-  "Hey! 👋 I'm {name} from ooloo. What brings you here today?",
-  "Hello! I'm {name} from ooloo. How can I make your trip easier?",
-  "Hi there! {name} from ooloo here. What can I do for you?",
-  "Hey! I'm {name} from ooloo. Ready to help with your travel plans!",
-  "Hello! 👋 I'm {name} from ooloo. Ask me anything about our luggage rentals!",
-  "Hi! {name} here from ooloo. How can I help you travel lighter?",
-  "Hey there! 👋 I'm {name} from ooloo. What questions do you have?",
-  "Hello! I'm {name} from ooloo. Let me help you with your trip!",
-  "Hi! I'm {name} from ooloo. Planning a trip? I can help!",
-  "Hey! {name} from ooloo here. 👋 What can I help you with today?",
-  "Hello there! I'm {name} from ooloo. How can I assist you?",
-  "Hi! 👋 {name} from ooloo at your service. What do you need?",
-  "Hey! I'm {name} from ooloo. Let's get your luggage sorted!",
-  "Hello! I'm {name} from ooloo. Traveling soon? I've got answers!",
-  "Hi there! 👋 {name} here from ooloo. How can I help?",
-  "Hey! I'm {name} from ooloo. Ask away!"
+  "Hi! 👋 I'm {name} from ooloo. What's your name?",
+  "Hey there! I'm {name} from ooloo. Who do I have the pleasure of chatting with?",
+  "Hello! 👋 {name} here from ooloo. What's your name?",
+  "Hi! I'm {name} from ooloo. And you are...?",
+  "Hey! 👋 I'm {name} from ooloo. What should I call you?",
+  "Hello! I'm {name} from ooloo. Who am I chatting with today?",
+  "Hi there! {name} from ooloo here. What's your name?",
+  "Hey! I'm {name} from ooloo. And who's this?",
+  "Hello! 👋 I'm {name} from ooloo. What's your name, friend?",
+  "Hi! {name} here from ooloo. Who am I speaking with?",
+  "Hey there! 👋 I'm {name} from ooloo. What can I call you?",
+  "Hello! I'm {name} from ooloo. What's your name?",
+  "Hi! I'm {name} from ooloo. Who do I have here?",
+  "Hey! {name} from ooloo here. 👋 What's your name?",
+  "Hello there! I'm {name} from ooloo. And you are?",
 ]
 
 const RETURN_GREETINGS = [
-  "Oh, you're back! 👋 What else can I help you with?",
-  "Hey, welcome back! What can I help you with now?",
-  "Good to see you again! 👋 What else do you need?",
-  "You're back! How can I help you this time?",
-  "Hey again! 👋 What else can I do for you?",
-  "Welcome back! Got more questions for me?",
-  "Oh hey, you're back! What's on your mind?",
-  "Nice to see you again! 👋 How can I help now?",
-  "You returned! What else can I assist with?",
-  "Hey, welcome back! 👋 What can I do for you?"
+  "Oh hey {userName}, you're back! 👋 What else can I help you with?",
+  "Hey {userName}, welcome back! What can I help you with now?",
+  "{userName}! Good to see you again! 👋 What else do you need?",
+  "You're back, {userName}! How can I help you this time?",
+  "Hey again {userName}! 👋 What else can I do for you?",
+  "Welcome back {userName}! Got more questions for me?",
+  "Oh hey {userName}, you're back! What's on your mind?",
+  "{userName}! Nice to see you again! 👋 How can I help now?",
+  "Hey {userName}! What else can I assist with?",
+  "{userName}, welcome back! 👋 What can I do for you?"
 ]
 
 const SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes in milliseconds
@@ -66,6 +61,7 @@ const SESSION_TIMEOUT = 30 * 60 * 1000 // 30 minutes in milliseconds
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false)
   const [botName, setBotName] = useState('')
+  const [userName, setUserName] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -80,7 +76,8 @@ export default function ChatWidget() {
       
       if (isReturningWithinSession && botName) {
         // Same session, same bot, return greeting
-        const returnGreeting = RETURN_GREETINGS[Math.floor(Math.random() * RETURN_GREETINGS.length)]
+        let returnGreeting = RETURN_GREETINGS[Math.floor(Math.random() * RETURN_GREETINGS.length)]
+        returnGreeting = returnGreeting.replace('{userName}', userName || 'friend')
         setMessages(prev => [...prev, { role: 'assistant', content: returnGreeting }])
       } else {
         // New session or first time
@@ -89,6 +86,7 @@ export default function ChatWidget() {
         const greeting = greetingTemplate.replace('{name}', randomName)
         
         setBotName(randomName)
+        setUserName('')
         setMessages([{ role: 'assistant', content: greeting }])
         setHasOpenedBefore(true)
       }
@@ -120,7 +118,9 @@ export default function ChatWidget() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, { role: 'user' as const, content: userMessage }].slice(1)
+          messages: [...messages, { role: 'user' as const, content: userMessage }].slice(1),
+          botName,
+          userName: userName || null
         })
       })
 
@@ -128,6 +128,21 @@ export default function ChatWidget() {
       
       if (data.error) {
         throw new Error(data.error)
+      }
+
+      // Check if this is the first user message (likely their name)
+      if (!userName && messages.length === 1) {
+        // Extract name from response - simple heuristic
+        const words = userMessage.split(' ')
+        const possibleName = words[0].replace(/[^a-zA-Z]/g, '')
+        if (possibleName.length >= 2 && possibleName.length <= 15) {
+          setUserName(possibleName.charAt(0).toUpperCase() + possibleName.slice(1).toLowerCase())
+        }
+      }
+
+      // Update userName if the API detected it
+      if (data.detectedName) {
+        setUserName(data.detectedName)
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.message }])
