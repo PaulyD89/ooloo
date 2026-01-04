@@ -104,7 +104,7 @@ export default function Home() {
             <video 
               className="w-full"
               controls
-              poster="/video-poster2.png"
+              poster="/video-poster3.png"
               playsInline
             >
               <source src="/ooloo-promo.mp4" type="video/mp4" />
