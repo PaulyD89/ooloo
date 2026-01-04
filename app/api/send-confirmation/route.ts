@@ -160,13 +160,14 @@ export async function POST(request: NextRequest) {
             </div>
 
             <div class="section">
-              <div class="section-title">Manage Your Order</div>
-              <p>Need to update your address or cancel your order? You can do it online:</p>
+              <div class="section-title">Track Your Order</div>
+              <p>Need to update your address, track delivery, or cancel your order? You can do it online:</p>
               <p style="margin: 15px 0;">
-                <a href="https://ooloo.vercel.app/order" class="btn" style="color: white;">Manage Your Order</a>
+                <a href="https://ooloo.vercel.app/order" class="btn" style="color: white;">Track Your Order</a>
               </p>
               <p style="color: #666; font-size: 14px;">Your Order ID: <strong>${orderId.slice(0, 8).toUpperCase()}</strong></p>
               <p style="color: #666; font-size: 13px; margin-top: 10px;">
+                ✓ Track delivery and pickup status in real-time<br/>
                 ✓ Edit delivery or return address up to 24 hours before<br/>
                 ✓ Cancel for a full refund up to 48 hours before delivery
               </p>

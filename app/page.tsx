@@ -22,7 +22,7 @@ export default function Home() {
                 Book Now
               </Link>
               <Link href="/order" className="text-gray-700 hover:text-cyan-600 font-medium transition">
-                Manage Order
+                Track Order
               </Link>
               <Link href="/faq" className="text-gray-700 hover:text-cyan-600 font-medium transition">
                 Support
@@ -104,7 +104,7 @@ export default function Home() {
             <video 
               className="w-full"
               controls
-              poster="/video-poster3.png"
+              poster="/video-poster.png"
               playsInline
             >
               <source src="/ooloo-promo.mp4" type="video/mp4" />

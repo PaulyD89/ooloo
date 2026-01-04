@@ -26,6 +26,8 @@ type Order = {
   ship_back_city: string | null
   ship_back_state: string | null
   ship_back_zip: string | null
+  delivery_photo_url: string | null
+  pickup_photo_url: string | null
   delivery_city: { name: string } | null
   return_city: { name: string } | null
 }
@@ -42,39 +44,96 @@ type OrderItem = {
 const STATUS_DISPLAY: Record<string, { label: string; color: string; description: string }> = {
   pending: { 
     label: 'Pending', 
-    color: 'bg-yellow-100 text-yellow-800',
+    color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     description: 'Your order is being processed'
   },
   confirmed: { 
     label: 'Confirmed', 
-    color: 'bg-blue-100 text-blue-800',
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
     description: 'Your order is confirmed and scheduled for delivery'
   },
   out_for_delivery: { 
     label: 'Out for Delivery', 
-    color: 'bg-purple-100 text-purple-800',
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
     description: 'Your luggage is on its way!'
   },
   delivered: { 
     label: 'Delivered', 
-    color: 'bg-green-100 text-green-800',
+    color: 'bg-green-100 text-green-800 border-green-200',
     description: 'Your luggage has been delivered. Enjoy your trip!'
   },
   out_for_pickup: { 
     label: 'Pickup Scheduled', 
-    color: 'bg-orange-100 text-orange-800',
+    color: 'bg-orange-100 text-orange-800 border-orange-200',
     description: 'We\'ll pick up your luggage soon'
   },
   returned: { 
     label: 'Completed', 
-    color: 'bg-gray-100 text-gray-800',
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
     description: 'Your rental is complete. Thanks for using ooloo!'
   },
   cancelled: { 
     label: 'Cancelled', 
-    color: 'bg-red-100 text-red-800',
+    color: 'bg-red-100 text-red-800 border-red-200',
     description: 'This order has been cancelled'
   }
+}
+
+// Delivery progress steps
+const DELIVERY_STEPS = ['confirmed', 'out_for_delivery', 'delivered']
+const RETURN_STEPS = ['delivered', 'out_for_pickup', 'returned']
+
+function ProgressBar({ steps, currentStatus, type }: { steps: string[], currentStatus: string, type: 'delivery' | 'return' }) {
+  const stepLabels: Record<string, string> = {
+    confirmed: 'Confirmed',
+    out_for_delivery: 'Out for Delivery',
+    delivered: type === 'delivery' ? 'Delivered' : 'Awaiting Pickup',
+    out_for_pickup: 'Out for Pickup',
+    returned: 'Returned'
+  }
+
+  const getCurrentStepIndex = () => {
+    if (currentStatus === 'cancelled') return -1
+    if (currentStatus === 'pending') return -1
+    const idx = steps.indexOf(currentStatus)
+    return idx >= 0 ? idx : (type === 'return' && ['out_for_pickup', 'returned'].includes(currentStatus) ? steps.indexOf(currentStatus) : -1)
+  }
+
+  const currentIdx = getCurrentStepIndex()
+
+  // For return progress, only show if delivery is complete
+  if (type === 'return' && !['delivered', 'out_for_pickup', 'returned'].includes(currentStatus)) {
+    return null
+  }
+
+  return (
+    <div className="flex items-center justify-between mb-4">
+      {steps.map((step, idx) => {
+        const isCompleted = currentIdx >= idx
+        const isCurrent = currentIdx === idx
+        
+        return (
+          <div key={step} className="flex items-center flex-1">
+            <div className="flex flex-col items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                isCompleted 
+                  ? 'bg-cyan-600 text-white' 
+                  : 'bg-gray-200 text-gray-500'
+              } ${isCurrent ? 'ring-4 ring-cyan-100' : ''}`}>
+                {isCompleted ? '✓' : idx + 1}
+              </div>
+              <span className={`text-xs mt-1 text-center max-w-[80px] ${isCompleted ? 'text-cyan-700 font-medium' : 'text-gray-500'}`}>
+                {stepLabels[step]}
+              </span>
+            </div>
+            {idx < steps.length - 1 && (
+              <div className={`flex-1 h-1 mx-2 rounded ${currentIdx > idx ? 'bg-cyan-600' : 'bg-gray-200'}`} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function OrderLookupContent() {
@@ -96,17 +155,21 @@ function OrderLookupContent() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionMessage, setActionMessage] = useState('')
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  
+  // Photo modal
+  const [showPhotoModal, setShowPhotoModal] = useState<'delivery' | 'pickup' | null>(null)
 
   const supabase = createClient()
 
-  // Auto-fill from URL parameters
+  // Auto-fill from URL params
   useEffect(() => {
-    const urlId = searchParams.get('id')
-    const urlEmail = searchParams.get('email')
+    const idParam = searchParams.get('id')
+    const emailParam = searchParams.get('email')
     
-    if (urlId && urlEmail) {
-      setOrderId(urlId)
-      setEmail(urlEmail)
+    if (idParam) setOrderId(idParam)
+    if (emailParam) setEmail(emailParam)
+    
+    if (idParam && emailParam && !autoLookup) {
       setAutoLookup(true)
     }
   }, [searchParams])
@@ -115,9 +178,8 @@ function OrderLookupContent() {
   useEffect(() => {
     if (autoLookup && email && orderId) {
       lookupOrder()
-      setAutoLookup(false)
     }
-  }, [autoLookup, email, orderId])
+  }, [autoLookup])
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
@@ -129,7 +191,7 @@ function OrderLookupContent() {
   }
 
   const formatWindow = (window: string | null) => {
-    if (!window) return 'N/A'
+    if (!window) return ''
     const windows: Record<string, string> = {
       morning: '9am - 12pm',
       afternoon: '12pm - 5pm',
@@ -138,19 +200,13 @@ function OrderLookupContent() {
     return windows[window] || window
   }
 
-  // Calculate hours until a date
   const getHoursUntil = (dateStr: string) => {
     const date = new Date(dateStr + 'T00:00:00')
     const now = new Date()
     return (date.getTime() - now.getTime()) / (1000 * 60 * 60)
   }
 
-  // Check if order can be cancelled (48+ hours before delivery)
-  const canCancel = order && 
-    !['cancelled', 'delivered', 'out_for_pickup', 'returned'].includes(order.status) &&
-    getHoursUntil(order.delivery_date) >= 48
-
-  // Check if delivery address can be edited (24+ hours before delivery)
+  // Check if delivery address can be edited (24+ hours before delivery, not yet delivered)
   const canEditDelivery = order &&
     !['cancelled', 'delivered', 'out_for_pickup', 'returned'].includes(order.status) &&
     getHoursUntil(order.delivery_date) >= 24
@@ -160,6 +216,11 @@ function OrderLookupContent() {
     !['cancelled', 'returned'].includes(order.status) &&
     order.return_method !== 'ship' &&
     getHoursUntil(order.return_date) >= 24
+
+  // Check if order can be cancelled (48+ hours before delivery)
+  const canCancel = order &&
+    !['cancelled', 'delivered', 'out_for_pickup', 'returned'].includes(order.status) &&
+    getHoursUntil(order.delivery_date) >= 48
 
   async function lookupOrder() {
     if (!email || !orderId) {
@@ -173,7 +234,7 @@ function OrderLookupContent() {
     setActionMessage('')
 
     const cleanEmail = email.trim().toLowerCase()
-    const cleanOrderId = orderId.trim().toLowerCase().replace(/-/g, '')
+    const cleanOrderId = orderId.trim().toLowerCase().replace(/-/g, '').replace('#', '')
 
     const { data: orders, error: fetchError } = await supabase
       .from('orders')
@@ -182,7 +243,7 @@ function OrderLookupContent() {
         delivery_city:cities!delivery_city_id(name),
         return_city:cities!return_city_id(name)
       `)
-      .eq('customer_email', cleanEmail)
+      .ilike('customer_email', cleanEmail)
 
     if (fetchError || !orders || orders.length === 0) {
       setError('Order not found. Please check your email and order ID.')
@@ -204,53 +265,21 @@ function OrderLookupContent() {
       return
     }
 
-    setOrder(matchedOrder)
-    setNewDeliveryAddress(matchedOrder.delivery_address || '')
+    setOrder(matchedOrder as Order)
+    setNewDeliveryAddress(matchedOrder.delivery_address)
     setNewReturnAddress(matchedOrder.return_address || '')
 
+    // Fetch order items
     const { data: items } = await supabase
       .from('order_items')
       .select(`
         *,
-        product:products!product_id(name)
+        product:products(name)
       `)
       .eq('order_id', matchedOrder.id)
 
-    if (items) setOrderItems(items)
-
+    setOrderItems((items as OrderItem[]) || [])
     setLoading(false)
-  }
-
-  async function cancelOrder() {
-    if (!order) return
-
-    setActionLoading(true)
-    setActionMessage('')
-
-    try {
-      const response = await fetch('/api/orders/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: order.id,
-          email: order.customer_email
-        })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        setActionMessage(data.error || 'Failed to cancel order')
-      } else {
-        setActionMessage('Order cancelled successfully. Refund will be processed within 5-10 business days.')
-        setOrder({ ...order, status: 'cancelled' })
-      }
-    } catch (err) {
-      setActionMessage('Failed to cancel order. Please try again.')
-    }
-
-    setActionLoading(false)
-    setShowCancelConfirm(false)
   }
 
   async function updateAddress(type: 'delivery' | 'return') {
@@ -259,22 +288,17 @@ function OrderLookupContent() {
     setActionLoading(true)
     setActionMessage('')
 
-    const body: any = {
-      orderId: order.id,
-      email: order.customer_email
-    }
-
-    if (type === 'delivery') {
-      body.deliveryAddress = newDeliveryAddress
-    } else {
-      body.returnAddress = newReturnAddress
-    }
+    const newAddress = type === 'delivery' ? newDeliveryAddress : newReturnAddress
 
     try {
       const response = await fetch('/api/orders/update-address', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({
+          orderId: order.id,
+          type,
+          address: newAddress
+        })
       })
 
       const data = await response.json()
@@ -298,6 +322,35 @@ function OrderLookupContent() {
     setActionLoading(false)
   }
 
+  async function cancelOrder() {
+    if (!order) return
+
+    setActionLoading(true)
+    setActionMessage('')
+
+    try {
+      const response = await fetch('/api/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setActionMessage(data.error || 'Failed to cancel order')
+      } else {
+        setActionMessage('Order cancelled successfully. Your refund will be processed within 5-10 business days.')
+        setOrder({ ...order, status: 'cancelled' })
+        setShowCancelConfirm(false)
+      }
+    } catch (err) {
+      setActionMessage('Failed to cancel order. Please try again.')
+    }
+
+    setActionLoading(false)
+  }
+
   const statusInfo = order ? STATUS_DISPLAY[order.status] || STATUS_DISPLAY.pending : null
   const isShipBack = order?.return_method === 'ship'
 
@@ -310,8 +363,8 @@ function OrderLookupContent() {
       </header>
 
       <div className="max-w-xl mx-auto p-4 sm:p-6">
-        <h1 className="text-2xl font-bold mb-2">Manage Your Order</h1>
-        <p className="text-gray-600 mb-6">Track, edit, or cancel your order</p>
+        <h1 className="text-2xl font-bold mb-2">Track Your Order</h1>
+        <p className="text-gray-600 mb-6">View status, edit details, or cancel your order</p>
 
         <div className="bg-white p-6 rounded-lg border mb-6">
           <div className="space-y-4">
@@ -360,9 +413,9 @@ function OrderLookupContent() {
         {order && (
           <div className="bg-white rounded-lg border overflow-hidden">
             {/* Status Banner */}
-            <div className={`p-6 ${statusInfo?.color}`}>
+            <div className={`p-6 border-b ${statusInfo?.color}`}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-lg font-bold">{statusInfo?.label}</span>
+                <span className="text-xl font-bold">{statusInfo?.label}</span>
                 <span className="text-sm font-mono opacity-75">#{order.id.slice(0, 8).toUpperCase()}</span>
               </div>
               <p className="text-sm opacity-90">{statusInfo?.description}</p>
@@ -370,105 +423,36 @@ function OrderLookupContent() {
 
             {/* Order Details */}
             <div className="p-6 space-y-6">
-              {/* Delivery Info */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
+              
+              {/* Delivery Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 border-b">
                   <h3 className="font-semibold flex items-center gap-2">
                     <span>📦</span> Delivery
                   </h3>
-                  {canEditDelivery && !editingDelivery && (
-                    <button
-                      onClick={() => setEditingDelivery(true)}
-                      className="text-sm text-cyan-600 hover:text-cyan-800"
-                    >
-                      Edit Address
-                    </button>
-                  )}
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="font-medium">{formatDate(order.delivery_date)}</p>
-                  <p className="text-gray-600">{formatWindow(order.delivery_window)}</p>
+                <div className="p-4">
+                  {/* Delivery Progress */}
+                  {order.status !== 'cancelled' && (
+                    <ProgressBar steps={DELIVERY_STEPS} currentStatus={order.status} type="delivery" />
+                  )}
                   
-                  {editingDelivery ? (
-                    <div className="mt-3 space-y-3">
-                      <textarea
-                        value={newDeliveryAddress}
-                        onChange={e => setNewDeliveryAddress(e.target.value)}
-                        className="w-full p-3 border rounded-lg text-sm"
-                        rows={2}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => updateAddress('delivery')}
-                          disabled={actionLoading}
-                          className="px-4 py-2 bg-black text-white rounded-lg text-sm disabled:bg-gray-300"
-                        >
-                          {actionLoading ? 'Saving...' : 'Save'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingDelivery(false)
-                            setNewDeliveryAddress(order.delivery_address)
-                          }}
-                          className="px-4 py-2 border rounded-lg text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-gray-600 mt-2">{order.delivery_address}</p>
-                  )}
-                </div>
-                {!canEditDelivery && !['cancelled', 'delivered', 'out_for_pickup', 'returned'].includes(order.status) && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Address changes must be made 24+ hours before delivery
-                  </p>
-                )}
-              </div>
-
-              {/* Return Info */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <span>{isShipBack ? '📦' : '🔄'}</span> {isShipBack ? 'UPS Ship Back' : 'Return Pickup'}
-                  </h3>
-                  {canEditReturn && !editingReturn && (
-                    <button
-                      onClick={() => setEditingReturn(true)}
-                      className="text-sm text-cyan-600 hover:text-cyan-800"
-                    >
-                      Edit Address
-                    </button>
-                  )}
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="font-medium">Return by: {formatDate(order.return_date)}</p>
-                  
-                  {isShipBack ? (
-                    <div className="mt-2">
-                      <p className="text-gray-600">
-                        Drop off at any UPS location from: {order.ship_back_address}, {order.ship_back_city}, {order.ship_back_state} {order.ship_back_zip}
-                      </p>
-                      <p className="text-sm text-blue-600 mt-2">
-                        Prepaid UPS label included with your delivery
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-gray-600">{formatWindow(order.return_window)}</p>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="font-medium">{formatDate(order.delivery_date)}</p>
+                      <p className="text-gray-600">{formatWindow(order.delivery_window)}</p>
                       
-                      {editingReturn ? (
+                      {editingDelivery ? (
                         <div className="mt-3 space-y-3">
                           <textarea
-                            value={newReturnAddress}
-                            onChange={e => setNewReturnAddress(e.target.value)}
+                            value={newDeliveryAddress}
+                            onChange={e => setNewDeliveryAddress(e.target.value)}
                             className="w-full p-3 border rounded-lg text-sm"
                             rows={2}
                           />
                           <div className="flex gap-2">
                             <button
-                              onClick={() => updateAddress('return')}
+                              onClick={() => updateAddress('delivery')}
                               disabled={actionLoading}
                               className="px-4 py-2 bg-black text-white rounded-lg text-sm disabled:bg-gray-300"
                             >
@@ -476,8 +460,8 @@ function OrderLookupContent() {
                             </button>
                             <button
                               onClick={() => {
-                                setEditingReturn(false)
-                                setNewReturnAddress(order.return_address || '')
+                                setEditingDelivery(false)
+                                setNewDeliveryAddress(order.delivery_address)
                               }}
                               className="px-4 py-2 border rounded-lg text-sm"
                             >
@@ -486,16 +470,144 @@ function OrderLookupContent() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-gray-600 mt-2">{order.return_address}</p>
+                        <>
+                          <p className="text-gray-600 mt-2">{order.delivery_address}</p>
+                          {canEditDelivery && (
+                            <button
+                              onClick={() => setEditingDelivery(true)}
+                              className="text-sm text-cyan-600 hover:text-cyan-800 mt-2"
+                            >
+                              Edit Address
+                            </button>
+                          )}
+                        </>
                       )}
-                    </>
+                    </div>
+                    
+                    {/* Delivery Photo */}
+                    {order.delivery_photo_url && (
+                      <button
+                        onClick={() => setShowPhotoModal('delivery')}
+                        className="ml-4 flex-shrink-0"
+                      >
+                        <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-green-500 bg-gray-100">
+                          <img 
+                            src={order.delivery_photo_url} 
+                            alt="Delivery proof" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <p className="text-xs text-green-600 text-center mt-1">Photo ✓</p>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {!canEditDelivery && !['cancelled', 'delivered', 'out_for_pickup', 'returned'].includes(order.status) && (
+                    <p className="text-xs text-gray-500 mt-3">
+                      Address changes must be made 24+ hours before delivery
+                    </p>
                   )}
                 </div>
-                {!canEditReturn && !isShipBack && !['cancelled', 'returned'].includes(order.status) && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Address changes must be made 24+ hours before pickup
-                  </p>
-                )}
+              </div>
+
+              {/* Return Section */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <span>{isShipBack ? '📦' : '🔄'}</span> {isShipBack ? 'UPS Ship Back' : 'Return Pickup'}
+                  </h3>
+                </div>
+                <div className="p-4">
+                  {/* Return Progress (only show after delivery) */}
+                  {!isShipBack && order.status !== 'cancelled' && ['delivered', 'out_for_pickup', 'returned'].includes(order.status) && (
+                    <ProgressBar steps={RETURN_STEPS} currentStatus={order.status} type="return" />
+                  )}
+                  
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="font-medium">Return by: {formatDate(order.return_date)}</p>
+                      
+                      {isShipBack ? (
+                        <div className="mt-2">
+                          <p className="text-gray-600">
+                            Drop off at any UPS location near: {order.ship_back_city}, {order.ship_back_state}
+                          </p>
+                          <p className="text-sm text-cyan-600 mt-2">
+                            ✓ Prepaid UPS label included with your delivery
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-gray-600">{formatWindow(order.return_window)}</p>
+                          
+                          {editingReturn ? (
+                            <div className="mt-3 space-y-3">
+                              <textarea
+                                value={newReturnAddress}
+                                onChange={e => setNewReturnAddress(e.target.value)}
+                                className="w-full p-3 border rounded-lg text-sm"
+                                rows={2}
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => updateAddress('return')}
+                                  disabled={actionLoading}
+                                  className="px-4 py-2 bg-black text-white rounded-lg text-sm disabled:bg-gray-300"
+                                >
+                                  {actionLoading ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingReturn(false)
+                                    setNewReturnAddress(order.return_address || '')
+                                  }}
+                                  className="px-4 py-2 border rounded-lg text-sm"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-gray-600 mt-2">{order.return_address}</p>
+                              {canEditReturn && (
+                                <button
+                                  onClick={() => setEditingReturn(true)}
+                                  className="text-sm text-cyan-600 hover:text-cyan-800 mt-2"
+                                >
+                                  Edit Address
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Pickup Photo */}
+                    {order.pickup_photo_url && (
+                      <button
+                        onClick={() => setShowPhotoModal('pickup')}
+                        className="ml-4 flex-shrink-0"
+                      >
+                        <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-green-500 bg-gray-100">
+                          <img 
+                            src={order.pickup_photo_url} 
+                            alt="Pickup proof" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <p className="text-xs text-green-600 text-center mt-1">Photo ✓</p>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {!canEditReturn && !isShipBack && !['cancelled', 'returned'].includes(order.status) && (
+                    <p className="text-xs text-gray-500 mt-3">
+                      Address changes must be made 24+ hours before pickup
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Items */}
@@ -586,8 +698,8 @@ function OrderLookupContent() {
             <div className="bg-gray-50 p-6 border-t">
               <p className="text-sm text-gray-600">
                 Need help? Email us at{' '}
-                <a href="mailto:help@ooloo.co" className="text-cyan-600 hover:underline">
-                  help@ooloo.co
+                <a href="mailto:support@ooloo.co" className="text-cyan-600 hover:underline">
+                  support@ooloo.co
                 </a>
               </p>
             </div>
@@ -600,6 +712,40 @@ function OrderLookupContent() {
           </div>
         )}
       </div>
+
+      {/* Photo Modal */}
+      {showPhotoModal && order && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowPhotoModal(null)}
+        >
+          <div className="max-w-lg w-full bg-white rounded-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="font-semibold">
+                {showPhotoModal === 'delivery' ? '📦 Delivery Photo' : '🔄 Pickup Photo'}
+              </h3>
+              <button 
+                onClick={() => setShowPhotoModal(null)}
+                className="text-gray-500 hover:text-gray-700 text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              <img 
+                src={showPhotoModal === 'delivery' ? order.delivery_photo_url! : order.pickup_photo_url!}
+                alt={`${showPhotoModal} proof`}
+                className="w-full rounded-lg"
+              />
+              <p className="text-sm text-gray-500 text-center mt-3">
+                {showPhotoModal === 'delivery' 
+                  ? 'Photo taken at delivery' 
+                  : 'Photo taken at pickup'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
@@ -607,8 +753,15 @@ function OrderLookupContent() {
 export default function OrderLookupPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
+      <main className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b p-6">
+          <a href="/">
+            <img src="/oolooicon.png" alt="ooloo" className="h-12" />
+          </a>
+        </header>
+        <div className="max-w-xl mx-auto p-6">
+          <div className="text-center py-12">Loading...</div>
+        </div>
       </main>
     }>
       <OrderLookupContent />
