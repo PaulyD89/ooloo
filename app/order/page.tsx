@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '../../lib/supabase'
 
 type Order = {
@@ -77,6 +78,7 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string; description
 }
 
 export default function OrderLookupPage() {
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [orderId, setOrderId] = useState('')
   const [order, setOrder] = useState<Order | null>(null)
@@ -84,6 +86,7 @@ export default function OrderLookupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [searched, setSearched] = useState(false)
+  const [autoLookup, setAutoLookup] = useState(false)
 
   // Edit mode states
   const [editingDelivery, setEditingDelivery] = useState(false)
@@ -95,6 +98,26 @@ export default function OrderLookupPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
   const supabase = createClient()
+
+  // Auto-fill from URL parameters
+  useEffect(() => {
+    const urlId = searchParams.get('id')
+    const urlEmail = searchParams.get('email')
+    
+    if (urlId && urlEmail) {
+      setOrderId(urlId)
+      setEmail(urlEmail)
+      setAutoLookup(true)
+    }
+  }, [searchParams])
+
+  // Auto-lookup when params are filled
+  useEffect(() => {
+    if (autoLookup && email && orderId) {
+      lookupOrder()
+      setAutoLookup(false)
+    }
+  }, [autoLookup, email, orderId])
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {

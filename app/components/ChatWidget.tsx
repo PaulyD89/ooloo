@@ -126,11 +126,46 @@ export default function ChatWidget() {
     setIsLoading(true)
 
     try {
+      // Check if this might be an email for order lookup
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+      const emailMatch = userMessage.match(emailRegex);
+      
+      // Check if we're in "lookup mode" (last assistant message asked for email)
+      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop()?.content || '';
+      const isLookupMode = lastAssistantMessage.toLowerCase().includes('email') && 
+                          (lastAssistantMessage.toLowerCase().includes('order') || 
+                           lastAssistantMessage.toLowerCase().includes('look up') ||
+                           lastAssistantMessage.toLowerCase().includes('find'));
+
+      let orderContext = '';
+      
+      if (emailMatch && isLookupMode) {
+        // Try to look up orders
+        const lookupResponse = await fetch('/api/chat/lookup-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailMatch[0] })
+        });
+        
+        const lookupData = await lookupResponse.json();
+        
+        if (lookupData.found && lookupData.orders.length > 0) {
+          orderContext = `\n\n[ORDER LOOKUP RESULTS for ${emailMatch[0]}]:\n`;
+          lookupData.orders.forEach((order: { orderNumber: string; fullId: string; status: string; deliveryDate: string; returnDate: string; city: string; total: string }) => {
+            const directLink = `https://ooloo.vercel.app/order?id=${order.fullId}&email=${encodeURIComponent(emailMatch[0])}`;
+            orderContext += `- Order #${order.orderNumber}: ${order.status}, ${order.city}, Delivery: ${order.deliveryDate}, Return: ${order.returnDate}, Total: $${order.total}\n  Direct link to manage: ${directLink}\n`;
+          });
+          orderContext += `\nShare the order details and provide the direct link so they can manage their order with one click.`;
+        } else {
+          orderContext = `\n\n[ORDER LOOKUP: No orders found for ${emailMatch[0]}. Let the customer know politely and ask if they might have used a different email.]`;
+        }
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, { role: 'user' as const, content: userMessage }].slice(1),
+          messages: [...messages, { role: 'user' as const, content: userMessage + orderContext }].slice(1),
           botName,
           userName: userName || null
         })
@@ -214,7 +249,18 @@ export default function ChatWidget() {
                       : 'bg-gray-100 text-gray-800 rounded-bl-md'
                   }`}
                 >
-                  {message.content}
+                  {message.role === 'assistant' ? (
+                    <span dangerouslySetInnerHTML={{ 
+                      __html: message.content
+                        .replace(/\n/g, '<br />')
+                        .replace(
+                          /(https?:\/\/[^\s]+)/g, 
+                          '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline text-cyan-600 hover:text-cyan-800">$1</a>'
+                        )
+                    }} />
+                  ) : (
+                    message.content
+                  )}
                 </div>
               </div>
             ))}
