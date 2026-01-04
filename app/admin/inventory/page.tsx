@@ -733,11 +733,11 @@ export default function InventoryPage() {
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50 border-b">
                             <tr>
-                              <th className="text-left p-3 font-medium">Date</th>
-                              <th className="text-center p-3 font-medium">Reserved</th>
-                              <th className="text-center p-3 font-medium">Available</th>
-                              <th className="text-center p-3 font-medium">Remaining</th>
-                              <th className="text-center p-3 font-medium">Status</th>
+                              <th className="text-left p-2 sm:p-3 font-medium">Date</th>
+                              <th className="text-center p-2 sm:p-3 font-medium">Rsv</th>
+                              <th className="text-center p-2 sm:p-3 font-medium hidden sm:table-cell">Avail</th>
+                              <th className="text-center p-2 sm:p-3 font-medium">Left</th>
+                              <th className="text-center p-2 sm:p-3 font-medium">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y">
@@ -747,11 +747,11 @@ export default function InventoryPage() {
                               
                               let status = { label: 'OK', color: 'bg-green-100 text-green-800' }
                               if (remaining < 0) {
-                                status = { label: `Oversold by ${Math.abs(remaining)}`, color: 'bg-red-100 text-red-800' }
+                                status = { label: `Oversold`, color: 'bg-red-100 text-red-800' }
                               } else if (remaining <= 2) {
                                 status = { label: 'Tight', color: 'bg-yellow-100 text-yellow-800' }
                               } else if (utilizationPct >= 80) {
-                                status = { label: 'High demand', color: 'bg-orange-100 text-orange-800' }
+                                status = { label: 'High', color: 'bg-orange-100 text-orange-800' }
                               }
                               
                               const dateObj = new Date(day.date + 'T00:00:00')
@@ -760,21 +760,21 @@ export default function InventoryPage() {
                               
                               return (
                                 <tr key={day.date} className={`${isToday ? 'bg-cyan-50' : ''} ${isWeekend ? 'bg-gray-50' : ''}`}>
-                                  <td className="p-3">
+                                  <td className="p-2 sm:p-3">
                                     <span className={isToday ? 'font-semibold' : ''}>
                                       {dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                                     </span>
-                                    {isToday && <span className="ml-2 text-xs text-cyan-600">(Today)</span>}
+                                    {isToday && <span className="ml-1 text-xs text-cyan-600">(Today)</span>}
                                   </td>
-                                  <td className="p-3 text-center font-medium">{day.reserved}</td>
-                                  <td className="p-3 text-center text-gray-500">{day.available}</td>
-                                  <td className="p-3 text-center">
+                                  <td className="p-2 sm:p-3 text-center font-medium">{day.reserved}</td>
+                                  <td className="p-2 sm:p-3 text-center text-gray-500 hidden sm:table-cell">{day.available}</td>
+                                  <td className="p-2 sm:p-3 text-center">
                                     <span className={remaining < 0 ? 'text-red-600 font-bold' : remaining <= 2 ? 'text-yellow-600 font-medium' : 'text-green-600'}>
                                       {remaining}
                                     </span>
                                   </td>
-                                  <td className="p-3 text-center">
-                                    <span className={`px-2 py-1 rounded-full text-xs ${status.color}`}>
+                                  <td className="p-2 sm:p-3 text-center">
+                                    <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${status.color}`}>
                                       {status.label}
                                     </span>
                                   </td>
