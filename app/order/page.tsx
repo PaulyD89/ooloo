@@ -363,7 +363,7 @@ function OrderLookupContent() {
       </header>
 
       <div className="max-w-xl mx-auto p-4 sm:p-6">
-        <h1 className="text-2xl font-bold mb-2">Track Your Order</h1>
+        <h1 className="text-2xl font-bold mb-2">Manage Your Order</h1>
         <p className="text-gray-600 mb-6">View status, edit details, or cancel your order</p>
 
         <div className="bg-white p-6 rounded-lg border mb-6">

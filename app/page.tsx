@@ -22,7 +22,7 @@ export default function Home() {
                 Book Now
               </Link>
               <Link href="/order" className="text-gray-700 hover:text-cyan-600 font-medium transition">
-                Track Order
+                Manage Order
               </Link>
               <Link href="/faq" className="text-gray-700 hover:text-cyan-600 font-medium transition">
                 Support
