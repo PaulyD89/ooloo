@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '../../lib/supabase'
 
@@ -77,7 +77,7 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string; description
   }
 }
 
-export default function OrderLookupPage() {
+function OrderLookupContent() {
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [orderId, setOrderId] = useState('')
@@ -601,5 +601,17 @@ export default function OrderLookupPage() {
         )}
       </div>
     </main>
+  )
+}
+
+export default function OrderLookupPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </main>
+    }>
+      <OrderLookupContent />
+    </Suspense>
   )
 }
