@@ -45,16 +45,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Format orders for chat response
-    const formattedOrders = orders.map(order => ({
-      orderNumber: order.id.slice(0, 8).toUpperCase(),
-      fullId: order.id,
-      name: order.customer_name,
-      status: order.status,
-      deliveryDate: order.delivery_date,
-      returnDate: order.return_date,
-      city: order.delivery_city?.name || 'Unknown',
-      total: (order.total / 100).toFixed(2)
-    }));
+    const formattedOrders = orders.map(order => {
+      const cityData = order.delivery_city as any;
+      return {
+        orderNumber: order.id.slice(0, 8).toUpperCase(),
+        fullId: order.id,
+        name: order.customer_name,
+        status: order.status,
+        deliveryDate: order.delivery_date,
+        returnDate: order.return_date,
+        city: cityData?.name || 'Unknown',
+        total: (order.total / 100).toFixed(2)
+      };
+    });
 
     return Response.json({ 
       found: true, 
