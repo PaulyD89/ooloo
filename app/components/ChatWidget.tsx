@@ -141,23 +141,24 @@ export default function ChatWidget() {
       
       if (emailMatch && isLookupMode) {
         // Try to look up orders
+        const cleanEmail = emailMatch[0].trim()
         const lookupResponse = await fetch('/api/chat/lookup-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailMatch[0] })
+          body: JSON.stringify({ email: cleanEmail })
         });
         
         const lookupData = await lookupResponse.json();
         
         if (lookupData.found && lookupData.orders.length > 0) {
-          orderContext = `\n\n[ORDER LOOKUP RESULTS for ${emailMatch[0]}]:\n`;
+          orderContext = `\n\n[ORDER LOOKUP RESULTS for ${cleanEmail}]:\n`;
           lookupData.orders.forEach((order: { orderNumber: string; fullId: string; status: string; deliveryDate: string; returnDate: string; city: string; total: string }) => {
-            const directLink = `https://ooloo.vercel.app/order?id=${order.fullId}&email=${encodeURIComponent(emailMatch[0])}`;
-            orderContext += `- Order #${order.orderNumber}: ${order.status}, ${order.city}, Delivery: ${order.deliveryDate}, Return: ${order.returnDate}, Total: $${order.total}\n  Direct link to manage: ${directLink}\n`;
+            const directLink = `https://ooloo.vercel.app/order?id=${order.fullId}&email=${encodeURIComponent(cleanEmail)}`;
+            orderContext += `Order #${order.orderNumber}: ${order.status}, ${order.city}, Delivery: ${order.deliveryDate}, Return: ${order.returnDate}, Total: $${order.total}\nDirect link: ${directLink}\n\n`;
           });
-          orderContext += `\nShare the order details and provide the direct link so they can manage their order with one click.`;
+          orderContext += `Share the order details and provide the direct link so they can manage their order with one click. Keep the link on its own line.`;
         } else {
-          orderContext = `\n\n[ORDER LOOKUP: No orders found for ${emailMatch[0]}. Let the customer know politely and ask if they might have used a different email.]`;
+          orderContext = `\n\n[ORDER LOOKUP: No orders found for ${cleanEmail}. Let the customer know politely and ask if they might have used a different email.]`;
         }
       }
 
@@ -254,8 +255,8 @@ export default function ChatWidget() {
                       __html: message.content
                         .replace(/\n/g, '<br />')
                         .replace(
-                          /(https?:\/\/[^\s]+)/g, 
-                          '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline text-cyan-600 hover:text-cyan-800">$1</a>'
+                          /(https?:\/\/[^\s<>]+)/g, 
+                          '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline text-cyan-600 hover:text-cyan-800">Manage Order</a>'
                         )
                     }} />
                   ) : (
