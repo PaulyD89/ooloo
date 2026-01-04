@@ -153,10 +153,11 @@ export default function ChatWidget() {
         if (lookupData.found && lookupData.orders.length > 0) {
           orderContext = `\n\n[ORDER LOOKUP RESULTS for ${cleanEmail}]:\n`;
           lookupData.orders.forEach((order: { orderNumber: string; fullId: string; status: string; deliveryDate: string; returnDate: string; city: string; total: string }) => {
-            const directLink = `https://ooloo.vercel.app/order?id=${order.fullId}&email=${encodeURIComponent(cleanEmail)}`;
+            // Use the short order number in the URL for better UX
+            const directLink = `https://ooloo.vercel.app/order?id=${order.orderNumber}&email=${encodeURIComponent(cleanEmail)}`;
             orderContext += `Order #${order.orderNumber}: ${order.status}, ${order.city}, Delivery: ${order.deliveryDate}, Return: ${order.returnDate}, Total: $${order.total}\nDirect link: ${directLink}\n\n`;
           });
-          orderContext += `Share the order details and provide the direct link so they can manage their order with one click. Keep the link on its own line.`;
+          orderContext += `Share the order details and provide the direct link so they can manage their order with one click. Keep the link on its own line. Use the short order number (like #692F9A42) when referring to orders.`;
         } else {
           orderContext = `\n\n[ORDER LOOKUP: No orders found for ${cleanEmail}. Let the customer know politely and ask if they might have used a different email.]`;
         }
