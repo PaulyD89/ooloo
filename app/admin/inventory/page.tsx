@@ -794,7 +794,7 @@ export default function InventoryPage() {
               </>
             )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Add Inventory Modal */}
