@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
         .eq('id', order.id)
 
       // Handle referral program
+      let customerReferralCode = ''
       try {
         // Check if customer exists
         const { data: existingCustomer } = await supabase
@@ -98,7 +99,10 @@ export async function POST(request: NextRequest) {
               referred_by_code: order.referral_code_used || null
             })
           
+          customerReferralCode = referralCode
           console.log('Created customer with referral code:', referralCode)
+        } else {
+          customerReferralCode = existingCustomer.referral_code
         }
 
         // Credit the referrer if a referral code was used
@@ -178,7 +182,8 @@ export async function POST(request: NextRequest) {
             shipBackCity: order.ship_back_city,
             shipBackState: order.ship_back_state,
             shipBackZip: order.ship_back_zip,
-            shipBackFee: order.ship_back_fee
+            shipBackFee: order.ship_back_fee,
+            referralCode: customerReferralCode
           })
         })
         console.log('Confirmation email sent for order:', order.id)
