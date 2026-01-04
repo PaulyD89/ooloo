@@ -631,7 +631,7 @@ export default function InventoryPage() {
               <p className="text-center py-8 text-gray-500">No inventory items found</p>
             )}
           </div>
-        ) : (
+        ) : viewMode === 'addons' ? (
           /* Add-ons View */
           <div className="bg-white rounded-lg border overflow-hidden">
             <table className="w-full">
