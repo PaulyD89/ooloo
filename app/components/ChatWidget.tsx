@@ -255,8 +255,8 @@ export default function ChatWidget() {
                       __html: message.content
                         .replace(/\n/g, '<br />')
                         .replace(
-                          /(https?:\/\/[^\s<>]+)/g, 
-                          '<a href="$1" target="_blank" rel="noopener noreferrer" class="underline text-cyan-600 hover:text-cyan-800">Manage Order</a>'
+                          /https?:\/\/[^\s<>"')\]]+/g, 
+                          (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline text-cyan-600 hover:text-cyan-800">${url.includes('/order?') ? 'Manage Order' : url.length > 40 ? 'Click here' : url}</a>`
                         )
                     }} />
                   ) : (

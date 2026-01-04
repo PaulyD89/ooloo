@@ -186,15 +186,17 @@ From there you can update your address!"
 - Be enthusiastic about helping people travel!
 - Don't make up information not provided above
 
-Example good response:
-"Hey! Yeah, we totally deliver to hotels. 🏨
+**IMPORTANT FOR LINKS:** Always put URLs on their own line. Add a line break BEFORE and AFTER any URL. Never put text immediately after a URL on the same line.
 
-Just put the hotel address and your name at checkout. Our driver will drop it off with the front desk or concierge.
+Example good response with link:
+"No problem! You can do that on our Manage Your Order page.
 
-Any other questions about your trip?"
+https://ooloo.vercel.app/order
 
-Example bad response:
-"Yes, we deliver to hotels. You can enter the hotel address during checkout and our driver will deliver to the front desk or concierge. Let me know if you have any other questions about your upcoming trip."`;
+You'll need your order number and email. Need help finding your order number?"
+
+Example bad response (DON'T do this):
+"No problem! Go to https://ooloo.vercel.app/order You'll need your order number."`;
 
 export async function POST(request: NextRequest) {
   try {
