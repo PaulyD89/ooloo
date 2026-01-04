@@ -126,12 +126,73 @@ export default function ChatWidget() {
     setIsLoading(true)
 
     try {
+      // Check for human handoff request
+      const handoffTriggers = [
+        'talk to a human',
+        'speak to someone',
+        'real person',
+        'talk to a person',
+        'speak to a human',
+        'human please',
+        'agent please',
+        'customer service',
+        'speak with someone',
+        'talk to support',
+        'contact support',
+        'need a human'
+      ]
+      const isHandoffRequest = handoffTriggers.some(trigger => 
+        userMessage.toLowerCase().includes(trigger)
+      )
+
+      // Check if user just provided email for handoff
+      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop()?.content || ''
+      const isHandoffEmailMode = lastAssistantMessage.toLowerCase().includes('connect you') && 
+                                  lastAssistantMessage.toLowerCase().includes('email')
+      
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
+      const emailMatch = userMessage.match(emailRegex)
+
+      if (isHandoffEmailMode && emailMatch) {
+        // Send the handoff email
+        const handoffResponse = await fetch('/api/chat/handoff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerEmail: emailMatch[0],
+            customerName: userName,
+            transcript: messages,
+            botName
+          })
+        })
+
+        if (handoffResponse.ok) {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: `Thanks! I've sent our conversation to the ooloo team. They'll reach out to you at ${emailMatch[0]} shortly. 📧\n\nIs there anything else I can help you with in the meantime?` 
+          }])
+        } else {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: `I had trouble connecting you. Please email us directly at support@ooloo.co and we'll help you right away!` 
+          }])
+        }
+        setIsLoading(false)
+        return
+      }
+
+      if (isHandoffRequest) {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: `Of course! I'll connect you with our team. 🙋\n\nWhat's your email address so they can reach out to you?` 
+        }])
+        setIsLoading(false)
+        return
+      }
+
       // Check if this might be an email for order lookup
-      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-      const emailMatch = userMessage.match(emailRegex);
       
       // Check if we're in "lookup mode" (last assistant message asked for email)
-      const lastAssistantMessage = messages.filter(m => m.role === 'assistant').pop()?.content || '';
       const isLookupMode = lastAssistantMessage.toLowerCase().includes('email') && 
                           (lastAssistantMessage.toLowerCase().includes('order') || 
                            lastAssistantMessage.toLowerCase().includes('look up') ||
