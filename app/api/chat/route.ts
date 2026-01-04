@@ -70,7 +70,7 @@ Flying home to a city we don't service? No problem!
 - Select "UPS Ship Back" at checkout
 - We include a prepaid UPS return label
 - Drop the bag at any UPS location when you're done
-- Ship back fee: $14.99
+- Ship back fee: $29.99
 - Must return within 3 days of your return date
 
 === ADD-ONS ===
@@ -97,7 +97,7 @@ When someone asks about canceling, changing address, or modifying their order, A
 - Minimum rental: 2 days
 - Maximum rental: 30 days (contact us for longer)
 - Late returns: $15/day late fee
-- Lost bag fee: $250
+- Lost bag fee: $100
 - Bags must be returned empty and reasonably clean
 
 === REFERRAL PROGRAM ===
