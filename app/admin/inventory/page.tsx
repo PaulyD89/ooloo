@@ -59,7 +59,17 @@ export default function InventoryPage() {
   
   const [selectedCity, setSelectedCity] = useState<string>('all')
   const [selectedProduct, setSelectedProduct] = useState<string>('all')
-  const [viewMode, setViewMode] = useState<'summary' | 'detail' | 'addons'>('summary')
+  const [viewMode, setViewMode] = useState<'summary' | 'detail' | 'addons' | 'forecast'>('summary')
+  
+  // Forecast data
+  const [forecastData, setForecastData] = useState<{
+    date: string
+    city_id: string
+    city_name: string
+    reserved: number
+    available: number
+  }[]>([])
+  const [forecastLoading, setForecastLoading] = useState(false)
   
   // Add inventory modal
   const [showAddModal, setShowAddModal] = useState(false)
@@ -198,6 +208,89 @@ export default function InventoryPage() {
       return a.product_name.localeCompare(b.product_name)
     }))
   }
+
+  async function loadForecast() {
+    setForecastLoading(true)
+    
+    const today = new Date()
+    const dates: string[] = []
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() + i)
+      dates.push(d.toISOString().split('T')[0])
+    }
+    
+    // Get all active orders that overlap with our forecast period
+    const startDate = dates[0]
+    const endDate = dates[dates.length - 1]
+    
+    const { data: orders } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        delivery_date,
+        return_date,
+        delivery_city_id,
+        order_items(quantity, product_id)
+      `)
+      .not('status', 'in', '("cancelled","returned")')
+      .lte('delivery_date', endDate)
+      .gte('return_date', startDate)
+    
+    // Get total inventory per city (all bag types combined, excluding retired)
+    const { data: inventoryData } = await supabase
+      .from('inventory_items')
+      .select('city_id, status')
+      .neq('status', 'retired')
+    
+    // Calculate available bags per city
+    const cityTotals: Record<string, number> = {}
+    if (inventoryData) {
+      for (const item of inventoryData) {
+        cityTotals[item.city_id] = (cityTotals[item.city_id] || 0) + 1
+      }
+    }
+    
+    // Build forecast data
+    const forecast: typeof forecastData = []
+    
+    for (const city of cities) {
+      for (const date of dates) {
+        // Count bags reserved on this date for this city
+        let reserved = 0
+        if (orders) {
+          for (const order of orders) {
+            if (order.delivery_city_id === city.id) {
+              // Check if this date falls within the rental period
+              if (date >= order.delivery_date && date <= order.return_date) {
+                // Sum all bags in this order
+                const items = order.order_items as { quantity: number }[]
+                reserved += items.reduce((sum, item) => sum + item.quantity, 0)
+              }
+            }
+          }
+        }
+        
+        forecast.push({
+          date,
+          city_id: city.id,
+          city_name: city.name,
+          reserved,
+          available: cityTotals[city.id] || 0
+        })
+      }
+    }
+    
+    setForecastData(forecast)
+    setForecastLoading(false)
+  }
+
+  // Load forecast when switching to forecast view
+  useEffect(() => {
+    if (viewMode === 'forecast' && cities.length > 0 && forecastData.length === 0) {
+      loadForecast()
+    }
+  }, [viewMode, cities])
 
   async function addInventory() {
     if (!addCity || !addProduct || addQuantity < 1) return
@@ -439,6 +532,12 @@ export default function InventoryPage() {
               >
                 Add-ons
               </button>
+              <button
+                onClick={() => setViewMode('forecast')}
+                className={`px-4 py-2 text-sm ${viewMode === 'forecast' ? 'bg-black text-white' : 'bg-white'}`}
+              >
+                Forecast
+              </button>
             </div>
           </div>
         </div>
@@ -599,6 +698,100 @@ export default function InventoryPage() {
             
             {addons.length === 0 && (
               <p className="text-center py-8 text-gray-500">No add-ons found</p>
+            )}
+          </div>
+        ) : viewMode === 'forecast' ? (
+          /* Forecast View */
+          <div className="space-y-6">
+            {forecastLoading ? (
+              <div className="text-center py-12">Loading forecast...</div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold">14-Day Inventory Forecast</h2>
+                  <button
+                    onClick={() => { setForecastData([]); loadForecast(); }}
+                    className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                
+                {cities.filter(c => selectedCity === 'all' || c.id === selectedCity).map(city => {
+                  const cityForecast = forecastData.filter(f => f.city_id === city.id)
+                  if (cityForecast.length === 0) return null
+                  
+                  const totalBags = cityForecast[0]?.available || 0
+                  
+                  return (
+                    <div key={city.id} className="bg-white rounded-lg border overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-3 border-b">
+                        <h3 className="font-semibold">{city.name}</h3>
+                        <p className="text-sm text-gray-500">{totalBags} total bags</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="text-left p-3 font-medium">Date</th>
+                              <th className="text-center p-3 font-medium">Reserved</th>
+                              <th className="text-center p-3 font-medium">Available</th>
+                              <th className="text-center p-3 font-medium">Remaining</th>
+                              <th className="text-center p-3 font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {cityForecast.map(day => {
+                              const remaining = day.available - day.reserved
+                              const utilizationPct = day.available > 0 ? (day.reserved / day.available) * 100 : 0
+                              
+                              let status = { label: 'OK', color: 'bg-green-100 text-green-800' }
+                              if (remaining < 0) {
+                                status = { label: `Oversold by ${Math.abs(remaining)}`, color: 'bg-red-100 text-red-800' }
+                              } else if (remaining <= 2) {
+                                status = { label: 'Tight', color: 'bg-yellow-100 text-yellow-800' }
+                              } else if (utilizationPct >= 80) {
+                                status = { label: 'High demand', color: 'bg-orange-100 text-orange-800' }
+                              }
+                              
+                              const dateObj = new Date(day.date + 'T00:00:00')
+                              const isToday = day.date === new Date().toISOString().split('T')[0]
+                              const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6
+                              
+                              return (
+                                <tr key={day.date} className={`${isToday ? 'bg-cyan-50' : ''} ${isWeekend ? 'bg-gray-50' : ''}`}>
+                                  <td className="p-3">
+                                    <span className={isToday ? 'font-semibold' : ''}>
+                                      {dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                    </span>
+                                    {isToday && <span className="ml-2 text-xs text-cyan-600">(Today)</span>}
+                                  </td>
+                                  <td className="p-3 text-center font-medium">{day.reserved}</td>
+                                  <td className="p-3 text-center text-gray-500">{day.available}</td>
+                                  <td className="p-3 text-center">
+                                    <span className={remaining < 0 ? 'text-red-600 font-bold' : remaining <= 2 ? 'text-yellow-600 font-medium' : 'text-green-600'}>
+                                      {remaining}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <span className={`px-2 py-1 rounded-full text-xs ${status.color}`}>
+                                      {status.label}
+                                    </span>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })}
+                
+                {forecastData.length === 0 && !forecastLoading && (
+                  <p className="text-center py-8 text-gray-500">No forecast data available</p>
+                )}
+              </>
             )}
           </div>
         )}
