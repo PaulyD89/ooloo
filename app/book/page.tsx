@@ -164,7 +164,7 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
       <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto">
         <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
           <h3 className="font-semibold text-lg">{product.name}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
         </div>
         
         <div className="p-4">
@@ -196,7 +196,7 @@ function ImageGallery({ product, onClose }: { product: Product, onClose: () => v
             </div>
           )}
           
-          <p className="text-center text-sm text-gray-500 mt-3">
+          <p className="text-center text-sm text-gray-600 mt-3">
             {images[selectedImage].label} View
           </p>
         </div>
@@ -761,11 +761,11 @@ function BookPageContent() {
 
         {step === 1 && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">Where and when?</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Where and when?</h2>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Delivery City</label>
+                <label className="block text-sm font-medium mb-2 text-gray-800">Delivery City</label>
                 <select 
                   value={deliveryCitySelect}
                   onChange={e => setDeliveryCitySelect(e.target.value)}
@@ -779,7 +779,7 @@ function BookPageContent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Return City</label>
+                <label className="block text-sm font-medium mb-2 text-gray-800">Return City</label>
                 <select 
                   value={isShipBack ? SHIP_BACK_OPTION_ID : returnCitySelect}
                   onChange={e => {
@@ -792,7 +792,7 @@ function BookPageContent() {
                     }
                   }}
                   disabled={!deliveryCitySelect}
-                  className={`w-full p-3 border rounded-lg ${!deliveryCitySelect ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''}`}
+                  className={`w-full p-3 border rounded-lg ${!deliveryCitySelect ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                 >
                   <option value="">{deliveryCitySelect ? 'Select a city' : 'Select delivery city first'}</option>
                   {cities.map(city => (
@@ -813,7 +813,7 @@ function BookPageContent() {
                   <h4 className="font-medium text-blue-800">Where will you drop off at UPS?</h4>
                   <p className="text-sm text-blue-600">Enter the address where you'll be when returning the luggage. We'll find the nearest UPS location for you.</p>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Street Address</label>
+                    <label className="block text-sm font-medium mb-2 text-gray-800">Street Address</label>
                     <input 
                       type="text" 
                       value={shipBackStreet}
@@ -824,7 +824,7 @@ function BookPageContent() {
                   </div>
                   <div className="grid grid-cols-6 gap-4">
                     <div className="col-span-3">
-                      <label className="block text-sm font-medium mb-2">City</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">City</label>
                       <input 
                         type="text" 
                         value={shipBackCity}
@@ -833,7 +833,7 @@ function BookPageContent() {
                       />
                     </div>
                     <div className="col-span-1">
-                      <label className="block text-sm font-medium mb-2">State</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">State</label>
                       <select
                         value={shipBackState}
                         onChange={e => setShipBackState(e.target.value)}
@@ -846,7 +846,7 @@ function BookPageContent() {
                       </select>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium mb-2">ZIP</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">ZIP</label>
                       <input 
                         type="text" 
                         value={shipBackZip}
@@ -860,7 +860,7 @@ function BookPageContent() {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-2">Delivery Date</label>
+                <label className="block text-sm font-medium mb-2 text-gray-800">Delivery Date</label>
                 <input 
                   type="date"
                   value={deliveryDate}
@@ -870,7 +870,7 @@ function BookPageContent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Return Date</label>
+                <label className="block text-sm font-medium mb-2 text-gray-800">Return Date</label>
                 <input 
                   type="date"
                   value={returnDate}
@@ -924,8 +924,8 @@ function BookPageContent() {
 
         {step === 2 && (
           <div>
-            <h2 className="text-2xl font-bold mb-2">Choose your luggage</h2>
-            <p className="text-gray-600 mb-6">{days} day rental</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Choose your luggage</h2>
+            <p className="text-gray-700 mb-6">{days} day rental</p>
 
             {/* Early Bird / Rush indicator on step 2 */}
             {isEarlyBird && (
@@ -983,10 +983,10 @@ function BookPageContent() {
                       )}
                       
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold">{product.name}</h3>
-                        <p className="text-sm text-gray-600 truncate">{product.description}</p>
+                        <h3 className="font-semibold text-gray-900">{product.name}</h3>
+                        <p className="text-sm text-gray-700 truncate">{product.description}</p>
                         <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
-                        <p className={`text-xs mt-1 ${soldOut ? 'text-red-600' : effectiveAvailable <= 3 ? 'text-orange-600' : 'text-gray-400'}`}>
+                        <p className={`text-xs mt-1 ${soldOut ? 'text-red-600' : effectiveAvailable <= 3 ? 'text-orange-600' : 'text-gray-500'}`}>
                           {soldOut ? 'Sold out for these dates' : `${effectiveAvailable} available`}
                         </p>
                       </div>
@@ -1016,7 +1016,7 @@ function BookPageContent() {
 
             {rentalSubtotal > 0 && (
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                <div className="flex justify-between font-semibold">
+                <div className="flex justify-between font-semibold text-gray-900">
                   <span>Subtotal</span>
                   <span>${(rentalSubtotal / 100).toFixed(2)}</span>
                 </div>
@@ -1049,13 +1049,13 @@ function BookPageContent() {
 
         {step === 3 && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">Your details</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Your details</h2>
             
             <div className="space-y-6">
               <div className="space-y-4">
-                <h3 className="font-semibold">Contact Information</h3>
+                <h3 className="font-semibold text-gray-900">Contact Information</h3>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Full Name</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-800">Full Name</label>
                   <input 
                     type="text" 
                     value={customerName}
@@ -1065,7 +1065,7 @@ function BookPageContent() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Email</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-800">Email</label>
                   <input 
                     type="email" 
                     value={customerEmail}
@@ -1076,7 +1076,7 @@ function BookPageContent() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Phone</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-800">Phone</label>
                   <input 
                     type="tel" 
                     value={customerPhone}
@@ -1088,10 +1088,10 @@ function BookPageContent() {
               </div>
 
               <div className="pt-4 border-t">
-                <h3 className="font-semibold mb-4">Delivery Address</h3>
+                <h3 className="font-semibold mb-4 text-gray-900">Delivery Address</h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Street Address</label>
+                    <label className="block text-sm font-medium mb-2 text-gray-800">Street Address</label>
                     <input 
                       type="text" 
                       value={deliveryStreet}
@@ -1102,7 +1102,7 @@ function BookPageContent() {
                   </div>
                   <div className="grid grid-cols-6 gap-4">
                     <div className="col-span-3">
-                      <label className="block text-sm font-medium mb-2">City</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">City</label>
                       <input 
                         type="text" 
                         value={deliveryCityAddress}
@@ -1111,7 +1111,7 @@ function BookPageContent() {
                       />
                     </div>
                     <div className="col-span-1">
-                      <label className="block text-sm font-medium mb-2">State</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">State</label>
                       <select
                         value={deliveryState}
                         onChange={e => setDeliveryState(e.target.value)}
@@ -1124,7 +1124,7 @@ function BookPageContent() {
                       </select>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium mb-2">ZIP</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">ZIP</label>
                       <input 
                         type="text" 
                         value={deliveryZip}
@@ -1135,7 +1135,7 @@ function BookPageContent() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Delivery Window</label>
+                    <label className="block text-sm font-medium mb-2 text-gray-800">Delivery Window</label>
                     <select 
                       value={deliveryWindow}
                       onChange={e => setDeliveryWindow(e.target.value)}
@@ -1163,7 +1163,7 @@ function BookPageContent() {
               {!isShipBack ? (
               <div className="pt-4 border-t">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold">Return Address</h3>
+                  <h3 className="font-semibold text-gray-900">Return Address</h3>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1171,12 +1171,12 @@ function BookPageContent() {
                       onChange={e => setSameAsDelivery(e.target.checked)}
                       className="w-4 h-4 rounded border-gray-300"
                     />
-                    <span className="text-sm text-gray-600">Same as delivery</span>
+                    <span className="text-sm text-gray-700">Same as delivery</span>
                   </label>
                 </div>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Street Address</label>
+                    <label className="block text-sm font-medium mb-2 text-gray-800">Street Address</label>
                     <input 
                       type="text" 
                       value={returnStreet}
@@ -1190,7 +1190,7 @@ function BookPageContent() {
                   </div>
                   <div className="grid grid-cols-6 gap-4">
                     <div className="col-span-3">
-                      <label className="block text-sm font-medium mb-2">City</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">City</label>
                       <input 
                         type="text" 
                         value={returnCityAddress}
@@ -1202,7 +1202,7 @@ function BookPageContent() {
                       />
                     </div>
                     <div className="col-span-1">
-                      <label className="block text-sm font-medium mb-2">State</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">State</label>
                       <select
                         value={returnState}
                         onChange={e => {
@@ -1218,7 +1218,7 @@ function BookPageContent() {
                       </select>
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-sm font-medium mb-2">ZIP</label>
+                      <label className="block text-sm font-medium mb-2 text-gray-800">ZIP</label>
                       <input 
                         type="text" 
                         value={returnZip}
@@ -1232,7 +1232,7 @@ function BookPageContent() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Return Window</label>
+                    <label className="block text-sm font-medium mb-2 text-gray-800">Return Window</label>
                     <select 
                       value={returnWindow}
                       onChange={e => setReturnWindow(e.target.value)}
@@ -1257,7 +1257,7 @@ function BookPageContent() {
               </div>
               ) : (
                 <div className="pt-4 border-t">
-                  <h3 className="font-semibold mb-4">📦 UPS Ship Back</h3>
+                  <h3 className="font-semibold mb-4 text-gray-900">📦 UPS Ship Back</h3>
                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
                     <p className="text-sm text-gray-700">
                       <span className="font-medium">Ship from:</span> {shipBackStreet}, {shipBackCity}, {shipBackState} {shipBackZip}
@@ -1279,7 +1279,7 @@ function BookPageContent() {
               {/* Travel Pack Upsell */}
               {addons.filter(a => a.slug !== 'ups-poly-bag').length > 0 && (
                 <div className="pt-4 border-t">
-                  <h3 className="font-semibold mb-4">Add to your trip</h3>
+                  <h3 className="font-semibold mb-4 text-gray-900">Add to your trip</h3>
                   <div className="space-y-3">
                     {addons.filter(addon => addon.slug !== 'ups-poly-bag').map(addon => {
                       const inCart = addonCart[addon.id] || 0
@@ -1305,8 +1305,8 @@ function BookPageContent() {
                           )}
                           
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold">{addon.name}</h4>
-                            <p className="text-sm text-gray-600">{addon.description}</p>
+                            <h4 className="font-semibold text-gray-900">{addon.name}</h4>
+                            <p className="text-sm text-gray-700">{addon.description}</p>
                             <p className="text-sm font-medium mt-1">${(addon.price / 100).toFixed(2)}</p>
                             {soldOut && (
                               <p className="text-xs text-red-600 mt-1">Out of stock</p>
@@ -1338,7 +1338,7 @@ function BookPageContent() {
               )}
 
               <div className="pt-4 border-t">
-                <h3 className="font-semibold mb-4">Promo Code</h3>
+                <h3 className="font-semibold mb-4 text-gray-900">Promo Code</h3>
                 {appliedPromo ? (
                   <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                     <div>
@@ -1369,7 +1369,7 @@ function BookPageContent() {
                     <button 
                       onClick={applyPromoCode}
                       disabled={promoLoading || !promoCodeInput.trim()}
-                      className="px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+                      className="px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500"
                     >
                       {promoLoading ? '...' : 'Apply'}
                     </button>
@@ -1382,7 +1382,7 @@ function BookPageContent() {
 
               {/* Referral Code / Credit Section */}
               <div className="pt-4 border-t">
-                <h3 className="font-semibold mb-4">Referral Code</h3>
+                <h3 className="font-semibold mb-4 text-gray-900">Referral Code</h3>
                 
                 {/* Show credit if customer has some */}
                 {customerCredit > 0 && (
@@ -1422,13 +1422,13 @@ function BookPageContent() {
                       <button 
                         onClick={applyReferralCode}
                         disabled={referralLoading || !referralCodeInput.trim() || !!appliedPromo}
-                        className="px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400"
+                        className="px-6 py-3 border rounded-lg font-medium hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-500"
                       >
                         {referralLoading ? '...' : 'Apply'}
                       </button>
                     </div>
                     {appliedPromo && (
-                      <p className="text-gray-500 text-sm mt-2">Remove promo code to use a referral code</p>
+                      <p className="text-gray-600 text-sm mt-2">Remove promo code to use a referral code</p>
                     )}
                   </>
                 )}
@@ -1542,7 +1542,7 @@ function BookPageContent() {
 
         {step === 4 && clientSecret && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">Payment</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Payment</h2>
             
             <div className="mb-6 p-4 bg-gray-50 rounded-lg">
               <div className="flex justify-between font-semibold text-lg">
@@ -1577,7 +1577,7 @@ function BookPageContent() {
           <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto">
             <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white">
               <h3 className="font-semibold text-lg">{galleryAddon.name}</h3>
-              <button onClick={() => setGalleryAddon(null)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+              <button onClick={() => setGalleryAddon(null)} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
             </div>
             
             <div className="p-4">
@@ -1591,7 +1591,7 @@ function BookPageContent() {
                 </div>
               )}
               
-              <p className="text-gray-600">{galleryAddon.description}</p>
+              <p className="text-gray-700">{galleryAddon.description}</p>
               <p className="font-semibold mt-3">${(galleryAddon.price / 100).toFixed(2)}</p>
             </div>
           </div>
