@@ -769,7 +769,8 @@ function BookPageContent() {
                 <select 
                   value={deliveryCitySelect}
                   onChange={e => setDeliveryCitySelect(e.target.value)}
-                  className="w-full p-3 border rounded-lg"
+                  className="w-full p-3 border rounded-lg text-gray-900"
+                  style={{ color: '#111827' }}
                 >
                   <option value="">Select a city</option>
                   {cities.map(city => (
@@ -792,7 +793,7 @@ function BookPageContent() {
                     }
                   }}
                   disabled={!deliveryCitySelect}
-                  className={`w-full p-3 border rounded-lg ${!deliveryCitySelect ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                  className={`w-full p-3 border rounded-lg text-gray-900 ${!deliveryCitySelect ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                 >
                   <option value="">{deliveryCitySelect ? 'Select a city' : 'Select delivery city first'}</option>
                   {cities.map(city => (
@@ -818,7 +819,7 @@ function BookPageContent() {
                       type="text" 
                       value={shipBackStreet}
                       onChange={e => setShipBackStreet(e.target.value)}
-                      className="w-full p-3 border rounded-lg" 
+                      className="w-full p-3 border rounded-lg text-gray-900" 
                       placeholder="123 Main St" 
                     />
                   </div>
@@ -829,7 +830,7 @@ function BookPageContent() {
                         type="text" 
                         value={shipBackCity}
                         onChange={e => setShipBackCity(e.target.value)}
-                        className="w-full p-3 border rounded-lg" 
+                        className="w-full p-3 border rounded-lg text-gray-900" 
                       />
                     </div>
                     <div className="col-span-1">
@@ -837,7 +838,7 @@ function BookPageContent() {
                       <select
                         value={shipBackState}
                         onChange={e => setShipBackState(e.target.value)}
-                        className="w-full p-3 border rounded-lg h-[50px]"
+                        className="w-full p-3 border rounded-lg h-[50px] text-gray-900"
                       >
                         <option value=""></option>
                         {US_STATES.map(state => (
@@ -851,7 +852,7 @@ function BookPageContent() {
                         type="text" 
                         value={shipBackZip}
                         onChange={e => setShipBackZip(e.target.value)}
-                        className="w-full p-3 border rounded-lg"
+                        className="w-full p-3 border rounded-lg text-gray-900"
                         placeholder="90210"
                       />
                     </div>
@@ -865,7 +866,7 @@ function BookPageContent() {
                   type="date"
                   value={deliveryDate}
                   onChange={e => setDeliveryDate(e.target.value)}
-                  className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
+                  className="w-full p-3 border rounded-lg text-base appearance-none min-w-0 text-gray-900"
                 />
               </div>
 
@@ -875,7 +876,7 @@ function BookPageContent() {
                   type="date"
                   value={returnDate}
                   onChange={e => setReturnDate(e.target.value)}
-                  className="w-full p-3 border rounded-lg text-base appearance-none min-w-0"
+                  className="w-full p-3 border rounded-lg text-base appearance-none min-w-0 text-gray-900"
                 />
               </div>
             </div>
@@ -995,15 +996,15 @@ function BookPageContent() {
                         <button 
                           onClick={() => updateCart(product.id, -1)}
                           disabled={inCart === 0}
-                          className="w-8 h-8 rounded-full border flex items-center justify-center disabled:opacity-30"
+                          className="w-8 h-8 rounded-full border-2 border-gray-400 text-gray-700 flex items-center justify-center disabled:opacity-30 disabled:border-gray-200"
                         >
                           -
                         </button>
-                        <span className="w-6 text-center">{inCart}</span>
+                        <span className="w-6 text-center text-gray-900 font-medium">{inCart}</span>
                         <button 
                           onClick={() => updateCart(product.id, 1)}
                           disabled={soldOut || cantAddMore}
-                          className="w-8 h-8 rounded-full border flex items-center justify-center disabled:opacity-30"
+                          className="w-8 h-8 rounded-full border-2 border-cyan-500 text-cyan-600 flex items-center justify-center disabled:opacity-30 disabled:border-gray-200 disabled:text-gray-400"
                         >
                           +
                         </button>
@@ -1060,7 +1061,7 @@ function BookPageContent() {
                     type="text" 
                     value={customerName}
                     onChange={e => setCustomerName(e.target.value)}
-                    className="w-full p-3 border rounded-lg" 
+                    className="w-full p-3 border rounded-lg text-gray-900" 
                     placeholder="John Smith" 
                   />
                 </div>
@@ -1071,7 +1072,7 @@ function BookPageContent() {
                     value={customerEmail}
                     onChange={e => setCustomerEmail(e.target.value)}
                     onBlur={e => checkCustomerCredit(e.target.value)}
-                    className="w-full p-3 border rounded-lg" 
+                    className="w-full p-3 border rounded-lg text-gray-900" 
                     placeholder="john@example.com" 
                   />
                 </div>
@@ -1081,7 +1082,7 @@ function BookPageContent() {
                     type="tel" 
                     value={customerPhone}
                     onChange={handlePhoneChange}
-                    className="w-full p-3 border rounded-lg" 
+                    className="w-full p-3 border rounded-lg text-gray-900" 
                     placeholder="(555) 123-4567" 
                   />
                 </div>
@@ -1096,7 +1097,7 @@ function BookPageContent() {
                       type="text" 
                       value={deliveryStreet}
                       onChange={e => setDeliveryStreet(e.target.value)}
-                      className="w-full p-3 border rounded-lg" 
+                      className="w-full p-3 border rounded-lg text-gray-900" 
                       placeholder="123 Main St, Apt 4" 
                     />
                   </div>
@@ -1107,7 +1108,7 @@ function BookPageContent() {
                         type="text" 
                         value={deliveryCityAddress}
                         onChange={e => setDeliveryCityAddress(e.target.value)}
-                        className="w-full p-3 border rounded-lg" 
+                        className="w-full p-3 border rounded-lg text-gray-900" 
                       />
                     </div>
                     <div className="col-span-1">
@@ -1115,7 +1116,7 @@ function BookPageContent() {
                       <select
                         value={deliveryState}
                         onChange={e => setDeliveryState(e.target.value)}
-                        className="w-full p-3 border rounded-lg h-[50px]"
+                        className="w-full p-3 border rounded-lg h-[50px] text-gray-900"
                       >
                         <option value=""></option>
                         {US_STATES.map(state => (
@@ -1129,7 +1130,7 @@ function BookPageContent() {
                         type="text" 
                         value={deliveryZip}
                         onChange={e => setDeliveryZip(e.target.value)}
-                        className="w-full p-3 border rounded-lg"
+                        className="w-full p-3 border rounded-lg text-gray-900"
                         placeholder="90210"
                       />
                     </div>
@@ -1139,7 +1140,7 @@ function BookPageContent() {
                     <select 
                       value={deliveryWindow}
                       onChange={e => setDeliveryWindow(e.target.value)}
-                      className="w-full p-3 border rounded-lg"
+                      className="w-full p-3 border rounded-lg text-gray-900"
                     >
                       {(deliveryWindowCapacity['morning'] || 0) < WINDOW_CAPACITY['morning'] && (
                         <option value="morning">Morning (9am - 12pm)</option>
@@ -1184,7 +1185,7 @@ function BookPageContent() {
                         setSameAsDelivery(false)
                         setReturnStreet(e.target.value)
                       }}
-                      className="w-full p-3 border rounded-lg" 
+                      className="w-full p-3 border rounded-lg text-gray-900" 
                       placeholder="123 Main St, Apt 4" 
                     />
                   </div>
@@ -1198,7 +1199,7 @@ function BookPageContent() {
                           setSameAsDelivery(false)
                           setReturnCityAddress(e.target.value)
                         }}
-                        className="w-full p-3 border rounded-lg" 
+                        className="w-full p-3 border rounded-lg text-gray-900" 
                       />
                     </div>
                     <div className="col-span-1">
@@ -1209,7 +1210,7 @@ function BookPageContent() {
                           setSameAsDelivery(false)
                           setReturnState(e.target.value)
                         }}
-                        className="w-full p-3 border rounded-lg h-[50px]"
+                        className="w-full p-3 border rounded-lg h-[50px] text-gray-900"
                       >
                         <option value=""></option>
                         {US_STATES.map(state => (
@@ -1226,7 +1227,7 @@ function BookPageContent() {
                           setSameAsDelivery(false)
                           setReturnZip(e.target.value)
                         }}
-                        className="w-full p-3 border rounded-lg"
+                        className="w-full p-3 border rounded-lg text-gray-900"
                         placeholder="90210"
                       />
                     </div>
@@ -1236,7 +1237,7 @@ function BookPageContent() {
                     <select 
                       value={returnWindow}
                       onChange={e => setReturnWindow(e.target.value)}
-                      className="w-full p-3 border rounded-lg"
+                      className="w-full p-3 border rounded-lg text-gray-900"
                     >
                       {(returnWindowCapacity['morning'] || 0) < WINDOW_CAPACITY['morning'] && (
                         <option value="morning">Morning (9am - 12pm)</option>
@@ -1317,15 +1318,15 @@ function BookPageContent() {
                             <button 
                               onClick={() => updateAddonCart(addon.id, -1)}
                               disabled={inCart === 0}
-                              className="w-8 h-8 rounded-full border border-blue-300 bg-white flex items-center justify-center disabled:opacity-30"
+                              className="w-8 h-8 rounded-full border-2 border-gray-400 text-gray-700 bg-white flex items-center justify-center disabled:opacity-30 disabled:border-gray-200"
                             >
                               -
                             </button>
-                            <span className="w-6 text-center">{inCart}</span>
+                            <span className="w-6 text-center text-gray-900 font-medium">{inCart}</span>
                             <button 
                               onClick={() => updateAddonCart(addon.id, 1)}
                               disabled={soldOut || cantAddMore}
-                              className="w-8 h-8 rounded-full border border-blue-300 bg-white flex items-center justify-center disabled:opacity-30"
+                              className="w-8 h-8 rounded-full border-2 border-cyan-500 text-cyan-600 bg-white flex items-center justify-center disabled:opacity-30 disabled:border-gray-200 disabled:text-gray-400"
                             >
                               +
                             </button>
@@ -1455,7 +1456,7 @@ function BookPageContent() {
               </div>
             </div>
 
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg text-gray-900">
               <div className="flex justify-between mb-2">
                 <span>Rental Subtotal</span>
                 <span>${(rentalSubtotal / 100).toFixed(2)}</span>
@@ -1473,25 +1474,25 @@ function BookPageContent() {
                 </div>
               )}
               {earlyBirdDiscount > 0 && (
-                <div className="flex justify-between mb-2 text-green-600">
+                <div className="flex justify-between mb-2 text-green-700">
                   <span>Early Bird Discount (10%)</span>
                   <span>-${(earlyBirdDiscount / 100).toFixed(2)}</span>
                 </div>
               )}
               {promoDiscount > 0 && (
-                <div className="flex justify-between mb-2 text-green-600">
+                <div className="flex justify-between mb-2 text-green-700">
                   <span>Promo Code ({appliedPromo?.code})</span>
                   <span>-${(promoDiscount / 100).toFixed(2)}</span>
                 </div>
               )}
               {referralDiscount > 0 && (
-                <div className="flex justify-between mb-2 text-cyan-600">
+                <div className="flex justify-between mb-2 text-cyan-700">
                   <span>Referral Discount ({appliedReferral?.code})</span>
                   <span>-${(referralDiscount / 100).toFixed(2)}</span>
                 </div>
               )}
               {creditApplied > 0 && (
-                <div className="flex justify-between mb-2 text-cyan-600">
+                <div className="flex justify-between mb-2 text-cyan-700">
                   <span>Referral Credit Applied</span>
                   <span>-${(creditApplied / 100).toFixed(2)}</span>
                 </div>
@@ -1501,13 +1502,13 @@ function BookPageContent() {
                 <span>${(deliveryFee / 100).toFixed(2)}</span>
               </div>
               {shipBackFee > 0 && (
-                <div className="flex justify-between mb-2 text-blue-600">
+                <div className="flex justify-between mb-2 text-blue-700">
                   <span>UPS Ship Back Fee</span>
                   <span>${(shipBackFee / 100).toFixed(2)}</span>
                 </div>
               )}
               {rushFee > 0 && (
-                <div className="flex justify-between mb-2 text-amber-600">
+                <div className="flex justify-between mb-2 text-amber-700">
                   <span>Rush Fee</span>
                   <span>${(rushFee / 100).toFixed(2)}</span>
                 </div>
@@ -1516,7 +1517,7 @@ function BookPageContent() {
                 <span>Tax ({(taxRate * 100).toFixed(1)}%)</span>
                 <span>${(tax / 100).toFixed(2)}</span>
               </div>
-              <div className="flex justify-between font-semibold text-lg pt-2 border-t">
+              <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-300">
                 <span>Total</span>
                 <span>${(total / 100).toFixed(2)}</span>
               </div>
