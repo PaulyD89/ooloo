@@ -3,6 +3,10 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '../../lib/supabase'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 type Order = {
   id: string
@@ -77,6 +81,115 @@ const STATUS_DISPLAY: Record<string, { label: string; color: string; description
     color: 'bg-red-100 text-red-800 border-red-200',
     description: 'This order has been cancelled'
   }
+}
+
+// Payment form component for extension payments
+function ExtensionPaymentForm({ 
+  onSuccess, 
+  onCancel,
+  amount,
+  orderId,
+  newReturnDate,
+  paymentIntentId
+}: { 
+  onSuccess: (message: string, newTotal: number) => void
+  onCancel: () => void
+  amount: number
+  orderId: string
+  newReturnDate: string
+  paymentIntentId: string
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stripe || !elements) return
+
+    setLoading(true)
+    setError('')
+
+    const { error: submitError } = await elements.submit()
+    if (submitError) {
+      setError(submitError.message || 'Payment failed')
+      setLoading(false)
+      return
+    }
+
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required'
+    })
+
+    if (confirmError) {
+      setError(confirmError.message || 'Payment failed')
+      setLoading(false)
+      return
+    }
+
+    if (paymentIntent && paymentIntent.status === 'succeeded') {
+      // Payment successful - now update the order
+      try {
+        const response = await fetch('/api/orders/extend-dates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId,
+            newReturnDate,
+            paymentIntentId: paymentIntent.id
+          })
+        })
+
+        const data = await response.json()
+
+        if (response.ok && data.success) {
+          onSuccess(data.message, data.newTotal)
+        } else {
+          setError(data.error || 'Failed to update order')
+        }
+      } catch (err) {
+        setError('Failed to update order')
+      }
+    }
+
+    setLoading(false)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+        <p className="font-medium text-amber-800">
+          Additional charge: ${(amount / 100).toFixed(2)}
+        </p>
+      </div>
+      
+      <PaymentElement />
+      
+      {error && (
+        <p className="text-red-500 text-sm">{error}</p>
+      )}
+      
+      <div className="flex gap-2 pt-2">
+        <button
+          type="submit"
+          disabled={!stripe || loading}
+          className="flex-1 bg-black text-white py-3 rounded-lg font-medium disabled:bg-gray-300"
+        >
+          {loading ? 'Processing...' : `Pay $${(amount / 100).toFixed(2)}`}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={loading}
+          className="px-4 py-3 border rounded-lg"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
 }
 
 // Delivery progress steps
@@ -158,6 +271,18 @@ function OrderLookupContent() {
   
   // Photo modal
   const [showPhotoModal, setShowPhotoModal] = useState<'delivery' | 'pickup' | null>(null)
+  
+  // Date extension states
+  const [showExtendDates, setShowExtendDates] = useState(false)
+  const [newReturnDate, setNewReturnDate] = useState('')
+  const [extensionQuote, setExtensionQuote] = useState<{
+    dayDifference: number
+    totalDifference: number
+    newTotal: number
+  } | null>(null)
+  const [extensionLoading, setExtensionLoading] = useState(false)
+  const [extensionClientSecret, setExtensionClientSecret] = useState<string | null>(null)
+  const [extensionPaymentIntentId, setExtensionPaymentIntentId] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -350,6 +475,117 @@ function OrderLookupContent() {
 
     setActionLoading(false)
   }
+
+  // Calculate extension price
+  async function calculateExtension(date: string) {
+    if (!order || !date) {
+      setExtensionQuote(null)
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/orders/extend-dates?orderId=${order.id}&newReturnDate=${date}`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setExtensionQuote({
+          dayDifference: data.dayDifference,
+          totalDifference: data.totalDifference,
+          newTotal: data.newTotal
+        })
+      } else {
+        setExtensionQuote(null)
+      }
+    } catch (err) {
+      setExtensionQuote(null)
+    }
+  }
+
+  // Submit date extension - initiates payment if needed
+  async function submitExtension() {
+    if (!order || !newReturnDate || !extensionQuote) return
+
+    setExtensionLoading(true)
+    setActionMessage('')
+
+    // If extending (positive price difference), need to collect payment
+    if (extensionQuote.totalDifference > 0) {
+      try {
+        const response = await fetch('/api/orders/extend-dates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: order.id,
+            newReturnDate
+          })
+        })
+
+        const data = await response.json()
+
+        if (data.requiresPayment && data.clientSecret) {
+          // Show payment form
+          setExtensionClientSecret(data.clientSecret)
+          setExtensionPaymentIntentId(data.paymentIntentId)
+        } else if (!response.ok) {
+          setActionMessage(data.error || 'Failed to initiate payment')
+        }
+      } catch (err) {
+        setActionMessage('Failed to process extension. Please try again.')
+      }
+      setExtensionLoading(false)
+      return
+    }
+
+    // If shortening (refund), no payment needed
+    try {
+      const response = await fetch('/api/orders/extend-dates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          newReturnDate
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setActionMessage(data.error || 'Failed to update dates')
+      } else {
+        setActionMessage(data.message)
+        setOrder({ ...order, return_date: newReturnDate, total: data.newTotal })
+        setShowExtendDates(false)
+        setExtensionQuote(null)
+        setNewReturnDate('')
+      }
+    } catch (err) {
+      setActionMessage('Failed to update dates. Please try again.')
+    }
+
+    setExtensionLoading(false)
+  }
+
+  // Handle successful payment
+  function handleExtensionPaymentSuccess(message: string, newTotal: number) {
+    setActionMessage(message)
+    setOrder(order ? { ...order, return_date: newReturnDate, total: newTotal } : null)
+    setShowExtendDates(false)
+    setExtensionQuote(null)
+    setNewReturnDate('')
+    setExtensionClientSecret(null)
+    setExtensionPaymentIntentId(null)
+  }
+
+  // Cancel payment flow
+  function cancelExtensionPayment() {
+    setExtensionClientSecret(null)
+    setExtensionPaymentIntentId(null)
+  }
+
+  // Check if dates can be modified (not cancelled/returned, and return date is in future)
+  const canModifyDates = order &&
+    !['cancelled', 'returned'].includes(order.status) &&
+    getHoursUntil(order.return_date) >= 24
 
   const statusInfo = order ? STATUS_DISPLAY[order.status] || STATUS_DISPLAY.pending : null
   const isShipBack = order?.return_method === 'ship'
@@ -609,6 +845,115 @@ function OrderLookupContent() {
                   )}
                 </div>
               </div>
+
+              {/* Extend/Shorten Dates Section */}
+              {canModifyDates && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-3 border-b">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <span>📅</span> Change Return Date
+                    </h3>
+                  </div>
+                  <div className="p-4">
+                    {/* Payment Form */}
+                    {extensionClientSecret && extensionPaymentIntentId && extensionQuote ? (
+                      <Elements stripe={stripePromise} options={{ clientSecret: extensionClientSecret }}>
+                        <ExtensionPaymentForm
+                          onSuccess={handleExtensionPaymentSuccess}
+                          onCancel={cancelExtensionPayment}
+                          amount={extensionQuote.totalDifference}
+                          orderId={order.id}
+                          newReturnDate={newReturnDate}
+                          paymentIntentId={extensionPaymentIntentId}
+                        />
+                      </Elements>
+                    ) : showExtendDates ? (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2 text-gray-700">New Return Date</label>
+                          <input
+                            type="date"
+                            value={newReturnDate}
+                            onChange={e => {
+                              setNewReturnDate(e.target.value)
+                              calculateExtension(e.target.value)
+                            }}
+                            min={new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
+                            className="w-full p-3 border rounded-lg text-gray-900"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Current return date: {formatDate(order.return_date)}
+                          </p>
+                        </div>
+
+                        {extensionQuote && (
+                          <div className={`p-4 rounded-lg ${extensionQuote.totalDifference > 0 ? 'bg-amber-50 border border-amber-200' : extensionQuote.totalDifference < 0 ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
+                            {extensionQuote.dayDifference > 0 ? (
+                              <>
+                                <p className="font-medium text-amber-800">
+                                  Extending by {extensionQuote.dayDifference} day{extensionQuote.dayDifference > 1 ? 's' : ''}
+                                </p>
+                                <p className="text-amber-700 text-sm mt-1">
+                                  Additional charge: <span className="font-semibold">${(extensionQuote.totalDifference / 100).toFixed(2)}</span>
+                                </p>
+                                <p className="text-amber-700 text-sm">
+                                  New total: <span className="font-semibold">${(extensionQuote.newTotal / 100).toFixed(2)}</span>
+                                </p>
+                              </>
+                            ) : extensionQuote.dayDifference < 0 ? (
+                              <>
+                                <p className="font-medium text-green-800">
+                                  Shortening by {Math.abs(extensionQuote.dayDifference)} day{Math.abs(extensionQuote.dayDifference) > 1 ? 's' : ''}
+                                </p>
+                                <p className="text-green-700 text-sm mt-1">
+                                  Refund amount: <span className="font-semibold">${(Math.abs(extensionQuote.totalDifference) / 100).toFixed(2)}</span>
+                                </p>
+                                <p className="text-green-700 text-sm">
+                                  New total: <span className="font-semibold">${(extensionQuote.newTotal / 100).toFixed(2)}</span>
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-gray-600">Same as current return date</p>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={submitExtension}
+                            disabled={extensionLoading || !extensionQuote || extensionQuote.dayDifference === 0}
+                            className="px-4 py-2 bg-black text-white rounded-lg text-sm disabled:bg-gray-300"
+                          >
+                            {extensionLoading ? 'Processing...' : extensionQuote && extensionQuote.dayDifference > 0 ? `Continue to Payment` : 'Confirm Change'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowExtendDates(false)
+                              setNewReturnDate('')
+                              setExtensionQuote(null)
+                            }}
+                            className="px-4 py-2 border rounded-lg text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-gray-600 text-sm mb-3">
+                          Need to extend or shorten your rental? You can change your return date here.
+                        </p>
+                        <button
+                          onClick={() => setShowExtendDates(true)}
+                          className="text-sm text-cyan-600 hover:text-cyan-800 font-medium"
+                        >
+                          Change Return Date →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Items */}
               <div>
