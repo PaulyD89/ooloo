@@ -1323,8 +1323,8 @@ export default function DriverPage() {
                             {!isCompleted && (
                               <button
                                 onClick={() => stop.type === 'delivery' 
-                                  ? markDelivered(stop.order.id) 
-                                  : markPickedUp(stop.order.id)
+                                  ? confirmAndMarkDelivered(stop.order.id) 
+                                  : confirmAndMarkPickedUp(stop.order.id)
                                 }
                                 className="text-sm bg-green-600 text-white px-3 py-1 rounded"
                               >
