@@ -964,7 +964,7 @@ function BookPageContent() {
                   const cantAddMore = inCart >= effectiveAvailable
 
                   return (
-                    <div key={product.id} className={`flex items-center gap-4 p-4 border rounded-lg ${soldOut ? 'opacity-50' : ''}`}>
+                    <div key={product.id} className={`flex items-center gap-4 p-4 border rounded-lg ${soldOut ? 'opacity-50 bg-gray-50' : ''}`}>
                       {product.image_url && (
                         <button
                           onClick={() => setGalleryProduct(product)}
@@ -987,9 +987,11 @@ function BookPageContent() {
                         <h3 className="font-semibold text-gray-900">{product.name}</h3>
                         <p className="text-sm text-gray-700 truncate">{product.description}</p>
                         <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
-                        <p className={`text-xs mt-1 ${soldOut ? 'text-red-600' : effectiveAvailable <= 3 ? 'text-orange-600' : 'text-gray-500'}`}>
-                          {soldOut ? 'Sold out for these dates' : `${effectiveAvailable} available`}
-                        </p>
+                        {soldOut ? (
+                          <p className="text-xs mt-1 text-red-600 font-medium">Not Available On This Date</p>
+                        ) : effectiveAvailable < 10 ? (
+                          <p className="text-xs mt-1 text-orange-600 font-medium">Only {effectiveAvailable} More Available On This Date</p>
+                        ) : null}
                       </div>
                       
                       <div className="flex items-center gap-2">
