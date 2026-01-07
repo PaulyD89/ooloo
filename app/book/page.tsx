@@ -989,8 +989,8 @@ function BookPageContent() {
                         <p className="text-sm font-medium mt-1">${(product.daily_rate / 100).toFixed(2)}/day</p>
                         {soldOut ? (
                           <p className="text-xs mt-1 text-red-600 font-medium">Not Available On This Date</p>
-                        ) : effectiveAvailable < 10 ? (
-                          <p className="text-xs mt-1 text-orange-600 font-medium">Only {effectiveAvailable} More Available On This Date</p>
+                        ) : (effectiveAvailable - inCart) <= 3 && (effectiveAvailable - inCart) > 0 ? (
+                          <p className="text-xs mt-1 text-orange-600 font-medium">Only {effectiveAvailable - inCart} More Available On This Date</p>
                         ) : null}
                       </div>
                       
