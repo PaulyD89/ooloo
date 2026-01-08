@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     `
 
     await resend.emails.send({
-      from: 'ooloo <noreply@oolootravel.com>',
+      from: 'ooloo <onboarding@resend.dev>',
       to: recipientEmail,
       subject: `🎁 ${recipientName}, you've received ${discountText} from ooloo!`,
       html: emailHtml
