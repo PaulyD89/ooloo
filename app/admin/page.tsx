@@ -128,6 +128,14 @@ export default function AdminPage() {
   const [newPromoExpires, setNewPromoExpires] = useState('')
   const [savingPromo, setSavingPromo] = useState(false)
   
+  // Gift code state
+  const [giftRecipientName, setGiftRecipientName] = useState('')
+  const [giftRecipientEmail, setGiftRecipientEmail] = useState('')
+  const [giftPromoType, setGiftPromoType] = useState<'percent' | 'fixed'>('percent')
+  const [giftPromoValue, setGiftPromoValue] = useState('')
+  const [giftMessage, setGiftMessage] = useState('')
+  const [sendingGift, setSendingGift] = useState(false)
+  
   // Driver management state
   const [showDriversModal, setShowDriversModal] = useState(false)
   const [drivers, setDrivers] = useState<Driver[]>([])
@@ -446,6 +454,77 @@ export default function AdminPage() {
       alert('Error creating promo code: ' + error.message)
     }
     setSavingPromo(false)
+  }
+
+  async function sendGiftCode() {
+    if (!giftRecipientName || !giftRecipientEmail || !giftPromoValue) {
+      alert('Please fill in recipient name, email, and discount amount')
+      return
+    }
+    
+    setSendingGift(true)
+    
+    // Generate unique code
+    const uniqueId = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const code = `GIFT-${uniqueId}`
+    
+    // Set expiration to 30 days from now
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 30)
+    
+    // Create the promo code in database
+    const { error: promoError } = await supabase
+      .from('promo_codes')
+      .insert({
+        code,
+        discount_type: giftPromoType,
+        discount_value: giftPromoType === 'percent' 
+          ? parseInt(giftPromoValue) 
+          : parseInt(giftPromoValue) * 100,
+        usage_limit: 1, // Single use
+        expires_at: expiresAt.toISOString(),
+        is_active: true,
+        times_used: 0
+      })
+    
+    if (promoError) {
+      alert('Error creating gift code: ' + promoError.message)
+      setSendingGift(false)
+      return
+    }
+    
+    // Send the email
+    try {
+      const response = await fetch('/api/send-gift-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientName: giftRecipientName,
+          recipientEmail: giftRecipientEmail,
+          code,
+          discountType: giftPromoType,
+          discountValue: giftPromoValue,
+          message: giftMessage,
+          expiresAt: expiresAt.toISOString()
+        })
+      })
+      
+      if (response.ok) {
+        alert(`Gift code ${code} sent to ${giftRecipientEmail}!`)
+        loadPromoCodes()
+        setGiftRecipientName('')
+        setGiftRecipientEmail('')
+        setGiftPromoValue('')
+        setGiftMessage('')
+      } else {
+        const data = await response.json()
+        alert('Code created but email failed: ' + (data.error || 'Unknown error') + `\nCode: ${code}`)
+      }
+    } catch (err) {
+      alert(`Code created but email failed. Code: ${code}`)
+    }
+    
+    setSendingGift(false)
   }
 
   async function togglePromoActive(id: string, currentlyActive: boolean) {
@@ -1493,6 +1572,61 @@ export default function AdminPage() {
                     className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                   >
                     {savingPromo ? 'Creating...' : 'Create Code'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Send Gift Code */}
+              <div className="bg-cyan-50 rounded-lg p-4 mb-6 border border-cyan-200">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <span>🎁</span> Send Gift Code
+                </h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Create a single-use code and email it directly to someone. Expires in 30 days.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Recipient Name"
+                    value={giftRecipientName}
+                    onChange={e => setGiftRecipientName(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Recipient Email"
+                    value={giftRecipientEmail}
+                    onChange={e => setGiftRecipientEmail(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <select
+                    value={giftPromoType}
+                    onChange={e => setGiftPromoType(e.target.value as 'percent' | 'fixed')}
+                    className="p-2 border rounded-lg"
+                  >
+                    <option value="percent">Percent Off</option>
+                    <option value="fixed">Fixed Amount ($)</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder={giftPromoType === 'percent' ? 'Percent (e.g. 50)' : 'Amount (e.g. 25)'}
+                    value={giftPromoValue}
+                    onChange={e => setGiftPromoValue(e.target.value)}
+                    className="p-2 border rounded-lg"
+                  />
+                  <textarea
+                    placeholder="Personal message (optional)"
+                    value={giftMessage}
+                    onChange={e => setGiftMessage(e.target.value)}
+                    className="p-2 border rounded-lg col-span-2"
+                    rows={2}
+                  />
+                  <button
+                    onClick={sendGiftCode}
+                    disabled={sendingGift || !giftRecipientName || !giftRecipientEmail || !giftPromoValue}
+                    className="p-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50 col-span-2"
+                  >
+                    {sendingGift ? 'Sending...' : '🎁 Send Gift Code'}
                   </button>
                 </div>
               </div>
