@@ -111,6 +111,9 @@ export default function AdminPage() {
   const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([])
   const [alertsLoading, setAlertsLoading] = useState(true)
   
+  // Revenue filter state
+  const [revenueCityFilter, setRevenueCityFilter] = useState('all')
+  
   // Cancel/refund state
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -787,9 +790,17 @@ export default function AdminPage() {
   startOfWeek.setDate(todayDate.getDate() - todayDate.getDay())
   const startOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
 
-  const todayRevenue = calculateRevenue(orders.filter(o => o.created_at.startsWith(today)))
-  const weekRevenue = calculateRevenue(orders.filter(o => new Date(o.created_at) >= startOfWeek))
-  const monthRevenue = calculateRevenue(orders.filter(o => new Date(o.created_at) >= startOfMonth))
+  // Filter orders by revenue city filter
+  const revenueFilteredOrders = revenueCityFilter === 'all' 
+    ? orders 
+    : orders.filter(o => {
+        const cityName = cities.find(c => c.id === revenueCityFilter)?.name
+        return o.delivery_city?.name === cityName || o.return_city?.name === cityName
+      })
+
+  const todayRevenue = calculateRevenue(revenueFilteredOrders.filter(o => o.created_at.startsWith(today)))
+  const weekRevenue = calculateRevenue(revenueFilteredOrders.filter(o => new Date(o.created_at) >= startOfWeek))
+  const monthRevenue = calculateRevenue(revenueFilteredOrders.filter(o => new Date(o.created_at) >= startOfMonth))
 
   // Filter orders
   const filteredOrders = orders.filter(order => {
@@ -937,18 +948,42 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto p-6">
         {/* Revenue Summary */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
-            <p className="text-sm text-green-700">Today's Revenue</p>
-            <p className="text-2xl font-bold text-green-800">${(todayRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <select
+                value={revenueCityFilter}
+                onChange={e => setRevenueCityFilter(e.target.value)}
+                className="text-sm border rounded-lg px-2 py-1 bg-white"
+              >
+                <option value="all">All Markets</option>
+                {cities.map(city => (
+                  <option key={city.id} value={city.id}>{city.name}</option>
+                ))}
+              </select>
+              {revenueCityFilter !== 'all' && (
+                <button
+                  onClick={() => setRevenueCityFilter('all')}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
-          <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-700">This Week</p>
-            <p className="text-2xl font-bold text-blue-800">${(weekRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          </div>
-          <div className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg border border-purple-200">
-            <p className="text-sm text-purple-700">This Month</p>
-            <p className="text-2xl font-bold text-purple-800">${(monthRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
+              <p className="text-sm text-green-700">Today's Revenue</p>
+              <p className="text-2xl font-bold text-green-800">${(todayRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-700">This Week</p>
+              <p className="text-2xl font-bold text-blue-800">${(weekRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg border border-purple-200">
+              <p className="text-sm text-purple-700">This Month</p>
+              <p className="text-2xl font-bold text-purple-800">${(monthRevenue / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
           </div>
         </div>
 
@@ -972,10 +1007,14 @@ export default function AdminPage() {
             <p className="text-sm text-gray-500">Total Orders</p>
             <p className="text-2xl font-bold">{orders.length}</p>
           </div>
-          <div className="p-4 bg-white rounded-lg border">
+          <button
+            onClick={() => { setFilter('delivered'); setDateFilter('all'); setCityFilter('all'); setSearchQuery(''); }}
+            className={`p-4 rounded-lg border text-left transition ${filter === 'delivered' && dateFilter === 'all' ? 'bg-cyan-50 border-cyan-300' : 'bg-white hover:bg-gray-50'}`}
+          >
             <p className="text-sm text-gray-500">Active Rentals</p>
             <p className="text-2xl font-bold">{orders.filter(o => o.status === 'delivered').length}</p>
-          </div>
+            <p className="text-xs text-gray-400 mt-1">Currently with customers</p>
+          </button>
         </div>
 
         {/* Inventory Alerts */}
